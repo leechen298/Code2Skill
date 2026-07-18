@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "v1",
+  "recordingId": "source-analysis-knowledge-search",
+  "server": {
+    "name": "knowledge-capabilities",
+    "description": "Expose independently useful knowledge discovery capabilities.",
+    "evidenceRefs": ["src/features/knowledge/index.ts#knowledgeFeature"]
+  },
+  "capabilities": [
+    {
+      "capabilityId": "list-knowledge-topics",
+      "toolName": "list_knowledge_topics",
+      "functionExport": "listKnowledgeTopics",
+      "description": "List the locally defined knowledge topic labels and codes.",
+      "authentication": "none",
+      "inputs": [],
+      "implementation": {"kind": "local"},
+      "successRule": {
+        "kind": "output",
+        "outputRequired": true,
+        "forbiddenOutputKeys": ["error", "errors"],
+        "requiredOutputPaths": [["topics"]],
+        "evidenceRefs": ["src/features/knowledge/topics.ts#topics"]
+      },
+      "sideEffect": "read",
+      "evidenceRefs": ["src/features/knowledge/topics.ts#topics"]
+    }
+  ],
+  "handoffs": []
+}

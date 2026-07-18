@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "v1",
+  "profile": "strict-export-v1",
+  "protocolVersion": "2025-11-25",
+  "transport": "stdio",
+  "documentationLanguage": "zh-CN",
+  "pageRoute": "/knowledge",
+  "allowedRuntimeOrigins": ["https://application.example"],
+  "dryRunEnvironmentVariable": "CODE2SKILL_DRY_RUN"
+}
