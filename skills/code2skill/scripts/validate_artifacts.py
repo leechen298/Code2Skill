@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from validate_vnext import validate_vnext_artifacts
+
 
 BASE_FILES = {
     "capability-bundle.json",
@@ -274,7 +276,7 @@ def validate_bundle(bundle: Any, allowed_origins: set[str], diagnostics: Diagnos
                         diagnostics.error(f"{binding_location}.source.inputName", "unknown input")
                     elif source["kind"] == "prior_response" and source.get("stepId") not in seen_steps:
                         diagnostics.error(f"{binding_location}.source.stepId", "must reference an earlier step")
-                    if binding.get("location") not in {"path", "query", "body", "header"}:
+                    if binding.get("location") not in {"path", "query", "body", "header", "multipart"}:
                         diagnostics.error(f"{binding_location}.location", "invalid binding location")
                     path = array(binding.get("path"), f"{binding_location}.path", diagnostics)
                     if not path:
@@ -535,7 +537,14 @@ def validate_runtime(root: Path, capabilities: dict[str, dict[str, Any]], dry_ru
         diagnostics.error("mcp-tool/index.mjs", "must expose an stdio MCP runtime")
 
 
-def validate_draft(root: Path, bundle: Any, capabilities: dict[str, dict[str, Any]], diagnostics: Diagnostics) -> None:
+def validate_draft(
+    root: Path,
+    bundle: Any,
+    capabilities: dict[str, dict[str, Any]],
+    diagnostics: Diagnostics,
+    *,
+    vnext: bool = False,
+) -> None:
     draft = read_json(root / "capability-draft.json", diagnostics)
     if not isinstance(draft, dict):
         return
@@ -544,9 +553,12 @@ def validate_draft(root: Path, bundle: Any, capabilities: dict[str, dict[str, An
     recording_id = bundle.get("recordingId") if isinstance(bundle, dict) else None
     if draft.get("recordingId") != recording_id:
         diagnostics.error("capability-draft.recordingId", "must exactly match capability-bundle.recordingId")
-    if draft.get("status") != "ready":
-        diagnostics.error("capability-draft.status", "must equal ready for an approved export")
-    if draft.get("missingEvidence") != []:
+    allowed_statuses = {"ready", "requires-review", "blocked"} if vnext else {"ready"}
+    if draft.get("status") not in allowed_statuses:
+        diagnostics.error("capability-draft.status", f"must be one of {sorted(allowed_statuses)}")
+    if not isinstance(draft.get("missingEvidence"), list):
+        diagnostics.error("capability-draft.missingEvidence", "must be an array")
+    elif not vnext and draft.get("missingEvidence") != []:
         diagnostics.error("capability-draft.missingEvidence", "must be empty; unresolved evidence blocks approval")
     for field in ("inputs", "provenance", "requestChain"):
         if not isinstance(draft.get(field), list):
@@ -589,10 +601,17 @@ def validate_draft(root: Path, bundle: Any, capabilities: dict[str, dict[str, An
                 diagnostics.error(mapping_location, "must be an object")
                 continue
             nonempty(mapping.get("inputName"), f"{mapping_location}.inputName", diagnostics)
-            if mapping.get("target") not in {"path", "query", "header", "body", "context"}:
+            if mapping.get("target") not in {"path", "query", "header", "body", "multipart", "context"}:
                 diagnostics.error(f"{mapping_location}.target", "invalid mapping target")
             nonempty(mapping.get("targetPath"), f"{mapping_location}.targetPath", diagnostics)
             evidence_refs(mapping.get("evidenceRefs"), f"{mapping_location}.evidenceRefs", diagnostics)
+
+    # vNext provenance and rich input metadata are derived from the Canonical
+    # Contract and are compared exactly by validate_vnext_artifacts().  The
+    # legacy inference below intentionally knows only authentication + handoff
+    # and would misclassify mixed user/Host inputs on authenticated Tools.
+    if vnext:
+        return
 
     handoffs = bundle.get("handoffs", []) if isinstance(bundle, dict) else []
     expected_inputs: list[dict[str, Any]] = []
@@ -711,7 +730,7 @@ def validate_workflow(root: Path, capabilities: dict[str, dict[str, Any]], diagn
             diagnostics.error(location, "must name exactly one capabilityId or runtime owner")
         if capability_id is not None and capability_id not in capabilities:
             diagnostics.error(f"{location}.capabilityId", "must name a declared capability")
-        if owner is not None and owner not in {"agent_host", "mcp_runtime", "target_api"}:
+        if owner is not None and owner not in {"agent_host", "mcp_runtime", "mcp_session_runtime", "target_api"}:
             diagnostics.error(f"{location}.owner", "invalid runtime owner")
         requires = array(step.get("requires"), f"{location}.requires", diagnostics)
         if not requires:
@@ -760,6 +779,178 @@ def validate_workflow(root: Path, capabilities: dict[str, dict[str, Any]], diagn
     nonempty(workflow.get("unknownOutcomePolicy"), "workflow.unknownOutcomePolicy", diagnostics)
 
 
+def _validate_preflight_checks(
+    value: Any,
+    *,
+    vnext: bool,
+    diagnostics: Diagnostics,
+) -> bool:
+    if not isinstance(value, list) or not value:
+        return False
+    valid = True
+    for index, item in enumerate(value):
+        location = f"preflight-report.checks[{index}]"
+        if not isinstance(item, dict):
+            diagnostics.error(location, "must be an executed check object")
+            valid = False
+            continue
+        if item.get("status") != "passed":
+            diagnostics.error(f"{location}.status", "must be passed")
+            valid = False
+        if not isinstance(item.get("command"), str) or not item["command"].strip():
+            diagnostics.error(f"{location}.command", "must record a non-empty executed command")
+            valid = False
+        if vnext:
+            exit_code = item.get("exitCode")
+            if not isinstance(exit_code, int) or isinstance(exit_code, bool) or exit_code != 0:
+                diagnostics.error(f"{location}.exitCode", "a passed vNext check must have exitCode=0")
+                valid = False
+            evidence_digest = item.get("evidenceHash", item.get("sha256"))
+            if not isinstance(evidence_digest, str) or not HEX64.fullmatch(evidence_digest):
+                diagnostics.error(
+                    f"{location}.evidenceHash",
+                    "must contain a SHA-256 evidenceHash or sha256 digest",
+                )
+                valid = False
+    return valid
+
+
+def _validate_vnext_live_matrix(
+    canonical: dict[str, Any],
+    matrix: dict[str, Any],
+    live: Any,
+    diagnostics: Diagnostics,
+) -> None:
+    if (
+        not isinstance(live, dict)
+        or live.get("schemaVersion") != "vNext"
+        or live.get("status") not in {"passed", "partial"}
+        or not HEX64.fullmatch(str(live.get("inputHash", "")))
+        or not HEX64.fullmatch(str(live.get("resultHash", "")))
+        or not isinstance(live.get("capabilities"), list)
+    ):
+        diagnostics.error(
+            "live-verification.json",
+            "must record capability-scoped vNext live evidence with SHA-256 hashes",
+        )
+        return
+
+    canonical_ids = {
+        item.get("capabilityId")
+        for item in canonical.get("capabilities", [])
+        if isinstance(item, dict)
+    }
+    canonical_by_id = {
+        item.get("capabilityId"): item
+        for item in canonical.get("capabilities", [])
+        if isinstance(item, dict) and isinstance(item.get("capabilityId"), str)
+    }
+    seen_ids: set[str] = set()
+    successful_ids: set[str] = set()
+    live_by_id: dict[str, dict[str, Any]] = {}
+    for index, item in enumerate(live["capabilities"]):
+        location = f"live-verification.capabilities[{index}]"
+        if not isinstance(item, dict):
+            diagnostics.error(location, "must be an object")
+            continue
+        capability_id = item.get("capabilityId")
+        unique_canonical_id = capability_id in canonical_ids and capability_id not in seen_ids
+        if not unique_canonical_id:
+            diagnostics.error(f"{location}.capabilityId", "must uniquely name a canonical capability")
+        if isinstance(capability_id, str):
+            seen_ids.add(capability_id)
+        status = item.get("status")
+        if status not in {"passed", "failed"}:
+            diagnostics.error(f"{location}.status", "must be passed or failed")
+        if not HEX64.fullmatch(str(item.get("inputHash", ""))) or not HEX64.fullmatch(str(item.get("resultHash", ""))):
+            diagnostics.error(location, "must contain SHA-256 input and result hashes")
+        if status == "passed":
+            if item.get("isError") is not False:
+                diagnostics.error(f"{location}.isError", "passed live evidence must record isError=false")
+            elif unique_canonical_id and isinstance(capability_id, str):
+                successful_ids.add(capability_id)
+        if unique_canonical_id and isinstance(capability_id, str):
+            live_by_id[capability_id] = item
+
+    expected_live_status = "passed" if successful_ids == canonical_ids else "partial"
+    if live.get("status") != expected_live_status:
+        diagnostics.error(
+            "live-verification.status",
+            "must be derived from successful live coverage of every canonical capability",
+        )
+
+    rows = matrix.get("capabilities", [])
+    if not isinstance(rows, list):
+        return
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        status = row.get("status")
+        if (
+            isinstance(status, dict)
+            and status.get("runtimeVerified") is True
+        ):
+            capability_id = row.get("capabilityId")
+            location = f"verification-matrix.capabilities[{index}]"
+            if capability_id not in successful_ids:
+                diagnostics.error(
+                    f"{location}.status.runtimeVerified",
+                    "requires successful live evidence for the same capabilityId",
+                )
+                continue
+            canonical_capability = canonical_by_id.get(capability_id, {})
+            tool_name = canonical_capability.get("toolName")
+            live_item = live_by_id.get(capability_id, {})
+            checks = row.get("checks") if isinstance(row.get("checks"), list) else []
+            if not any(
+                isinstance(check, dict)
+                and check.get("phase") == "runtime"
+                and check.get("status") == "passed"
+                and check.get("toolName") == tool_name
+                and check.get("inputHash") == live_item.get("inputHash")
+                and check.get("resultHash") == live_item.get("resultHash")
+                for check in checks
+            ):
+                diagnostics.error(
+                    f"{location}.checks",
+                    "runtime verification needs an executed runtime check bound to this Tool's live input/result hashes",
+                )
+
+    workflow_rows = matrix.get("workflows", [])
+    workflows = {
+        item.get("workflowId"): item
+        for item in canonical.get("workflows", [])
+        if isinstance(item, dict) and isinstance(item.get("workflowId"), str)
+    }
+    if not isinstance(workflow_rows, list):
+        return
+    for index, row in enumerate(workflow_rows):
+        if not isinstance(row, dict):
+            continue
+        status = row.get("status")
+        if not isinstance(status, dict) or status.get("runtimeVerified") is not True:
+            continue
+        location = f"verification-matrix.workflows[{index}]"
+        workflow = workflows.get(row.get("workflowId"), {})
+        entry_id = workflow.get("entryCapabilityId")
+        live_item = live_by_id.get(entry_id, {})
+        tool_name = canonical_by_id.get(entry_id, {}).get("toolName")
+        checks = row.get("checks") if isinstance(row.get("checks"), list) else []
+        if entry_id not in successful_ids or not any(
+            isinstance(check, dict)
+            and check.get("phase") == "runtime"
+            and check.get("status") == "passed"
+            and check.get("toolName") == tool_name
+            and check.get("inputHash") == live_item.get("inputHash")
+            and check.get("resultHash") == live_item.get("resultHash")
+            for check in checks
+        ):
+            diagnostics.error(
+                f"{location}.checks",
+                "workflow runtime verification needs a runtime check bound to its entry Tool's live evidence",
+            )
+
+
 def validate_finalization(root: Path, diagnostics: Diagnostics) -> None:
     receipt = read_json(root / "function-core/validation-receipt.json", diagnostics)
     preflight = read_json(root / "preflight-report.json", diagnostics)
@@ -768,17 +959,84 @@ def validate_finalization(root: Path, diagnostics: Diagnostics) -> None:
     manifest = read_json(root / "export-manifest.json", diagnostics)
     bundle_hash = sha256(root / "capability-bundle.json")
     draft_hash = sha256(root / "capability-draft.json")
+    vnext = (root / "canonical-contract.json").is_file()
+    canonical = read_json(root / "canonical-contract.json", diagnostics) if vnext else None
     if isinstance(receipt, dict):
         if receipt.get("bundleHash") != bundle_hash or receipt.get("capabilityDraftHash") != draft_hash:
             diagnostics.error("function-core/validation-receipt.json", "bundle and draft hashes must match current files")
-    if not isinstance(preflight, dict) or preflight.get("status") != "passed" or not preflight.get("checks") or any(item.get("status") != "passed" for item in preflight.get("checks", []) if isinstance(item, dict)):
+        if isinstance(canonical, dict):
+            if receipt.get("contractId") != canonical.get("contractId"):
+                diagnostics.error("function-core/validation-receipt.json", "contractId must match canonical-contract.json")
+            if receipt.get("canonicalContractHash") != sha256(root / "canonical-contract.json"):
+                diagnostics.error("function-core/validation-receipt.json", "canonical contract hash must match current file")
+    preflight_checks_valid = isinstance(preflight, dict) and _validate_preflight_checks(
+        preflight.get("checks"),
+        vnext=vnext,
+        diagnostics=diagnostics,
+    )
+    if not isinstance(preflight, dict) or preflight.get("status") != "passed" or not preflight_checks_valid:
         diagnostics.error("preflight-report.json", "must record a fully passed preflight")
     elif preflight.get("bundleHash") != bundle_hash or preflight.get("capabilityDraftHash") != draft_hash:
         diagnostics.error("preflight-report.json", "bundle and draft hashes must match current files")
-    if not isinstance(approval, dict) or approval.get("decision") != "approved" or approval.get("preflightStatus") != "passed" or not approval.get("artifacts"):
-        diagnostics.error("approval-audit.json", "must approve a passed preflight and enumerate artifacts")
-    if not isinstance(live, dict) or live.get("status") != "passed" or live.get("isError") is not False or not HEX64.fullmatch(str(live.get("inputHash", ""))) or not HEX64.fullmatch(str(live.get("resultHash", ""))):
-        diagnostics.error("live-verification.json", "must record a real successful invocation with SHA-256 input/result hashes")
+    if vnext:
+        allowed_decisions = {"approved", "partially-approved", "requires-review", "blocked"}
+        if (
+            not isinstance(approval, dict)
+            or approval.get("decision") not in allowed_decisions
+            or approval.get("preflightStatus") != "passed"
+            or not approval.get("artifacts")
+        ):
+            diagnostics.error(
+                "approval-audit.json",
+                "must honestly summarize a passed vNext preflight and enumerate artifacts",
+            )
+        matrix = read_json(root / "verification-matrix.json", diagnostics)
+        if isinstance(approval, dict) and isinstance(matrix, dict):
+            def item_decision(item: Any) -> str:
+                status = item.get("status", {}) if isinstance(item, dict) else {}
+                if status.get("blocked") is True:
+                    return "blocked"
+                if status.get("requiresReview") is True:
+                    return "requires-review"
+                return "approved"
+
+            expected_capabilities = [
+                {"capabilityId": item.get("capabilityId"), "decision": item_decision(item)}
+                for item in matrix.get("capabilities", [])
+                if isinstance(item, dict)
+            ]
+            expected_workflows = [
+                {"workflowId": item.get("workflowId"), "decision": item_decision(item)}
+                for item in matrix.get("workflows", [])
+                if isinstance(item, dict)
+            ]
+            decisions = [item["decision"] for item in expected_capabilities + expected_workflows]
+            if decisions and all(item == "approved" for item in decisions):
+                expected_overall = "approved"
+            elif "approved" in decisions:
+                expected_overall = "partially-approved"
+            elif "requires-review" in decisions:
+                expected_overall = "requires-review"
+            else:
+                expected_overall = "blocked"
+            if approval.get("capabilities") != expected_capabilities:
+                diagnostics.error("approval-audit.capabilities", "must be derived exactly from capability verification states")
+            if approval.get("workflows") != expected_workflows:
+                diagnostics.error("approval-audit.workflows", "must be derived exactly from workflow verification states")
+            if approval.get("decision") != expected_overall:
+                diagnostics.error("approval-audit.decision", "must be derived from every capability and workflow decision")
+        if isinstance(canonical, dict):
+            _validate_vnext_live_matrix(
+                canonical,
+                matrix if isinstance(matrix, dict) else {},
+                live,
+                diagnostics,
+            )
+    else:
+        if not isinstance(approval, dict) or approval.get("decision") != "approved" or approval.get("preflightStatus") != "passed" or not approval.get("artifacts"):
+            diagnostics.error("approval-audit.json", "must approve a passed preflight and enumerate artifacts")
+        if not isinstance(live, dict) or live.get("status") != "passed" or live.get("isError") is not False or not HEX64.fullmatch(str(live.get("inputHash", ""))) or not HEX64.fullmatch(str(live.get("resultHash", ""))):
+            diagnostics.error("live-verification.json", "must record a real successful invocation with SHA-256 input/result hashes")
     if not isinstance(manifest, dict) or manifest.get("schemaVersion") != "v0" or not isinstance(manifest.get("files"), list):
         diagnostics.error("export-manifest.json", "must be a v0 file manifest")
         return
@@ -801,7 +1059,13 @@ def validate_finalization(root: Path, diagnostics: Diagnostics) -> None:
         diagnostics.error("export-manifest.files", "must cover every candidate file except export-manifest.json exactly once")
 
 
-def validate(root: Path, source_root: Path, pre_finalize: bool, diagnostics: Diagnostics) -> dict[str, Any] | None:
+def validate(
+    root: Path,
+    source_root: Path,
+    pre_finalize: bool,
+    diagnostics: Diagnostics,
+    source_maps: dict[str, Path] | None = None,
+) -> dict[str, Any] | None:
     required = BASE_FILES if pre_finalize else BASE_FILES | FINAL_FILES
     for relative in sorted(required):
         if not (root / relative).is_file():
@@ -815,16 +1079,32 @@ def validate(root: Path, source_root: Path, pre_finalize: bool, diagnostics: Dia
     if bundle != mirrored:
         diagnostics.error("function-core/capability-bundle.json", "must exactly mirror capability-bundle.json")
     capabilities = validate_bundle(bundle, allowed_origins, diagnostics)
-    validate_draft(root, bundle, capabilities, diagnostics)
+    vnext = (root / "canonical-contract.json").is_file()
+    validate_draft(root, bundle, capabilities, diagnostics, vnext=vnext)
     validate_runtime(root, capabilities, dry_run, diagnostics)
     validate_documents(root, profile, capabilities, diagnostics)
-    if any(capability.get("sideEffect") != "read" for capability in capabilities.values()):
+    has_writes = any(capability.get("sideEffect") != "read" for capability in capabilities.values())
+    if vnext:
+        if (root / "workflow.json").exists():
+            diagnostics.error(
+                "workflow.json",
+                "vNext hard workflows live only in canonical-contract.json; a second hand-maintained workflow is forbidden",
+            )
+    elif has_writes:
         if not (root / "workflow.json").is_file():
             diagnostics.error("workflow.json", "required when any capability has a write side effect")
         else:
             validate_workflow(root, capabilities, diagnostics)
     elif (root / "workflow.json").exists():
         diagnostics.warn("workflow.json", "read-only bundles usually do not need a constrained write workflow")
+    if vnext:
+        validate_vnext_artifacts(
+            root,
+            source_root,
+            source_maps or {},
+            pre_finalize,
+            diagnostics,
+        )
     if not pre_finalize:
         validate_finalization(root, diagnostics)
     return bundle if isinstance(bundle, dict) else None
@@ -834,14 +1114,51 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifact_root", type=Path)
     parser.add_argument("--source-root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--source-map",
+        action="append",
+        default=[],
+        metavar="SOURCE_ID=PATH",
+        help="repeat for each explicitly authorized vNext source root",
+    )
     parser.add_argument("--pre-finalize", action="store_true", help="validate generation before audit files are finalized")
     return parser.parse_args()
+
+
+def parse_source_maps(values: list[str], diagnostics: Diagnostics) -> dict[str, Path]:
+    result: dict[str, Path] = {}
+    for index, value in enumerate(values):
+        if "=" not in value:
+            diagnostics.error(f"--source-map[{index}]", "must use SOURCE_ID=PATH")
+            continue
+        source_id, raw_path = value.split("=", 1)
+        if not re.fullmatch(r"[a-z][a-z0-9-]{1,80}", source_id):
+            diagnostics.error(f"--source-map[{index}]", "has an invalid source ID")
+            continue
+        if not raw_path:
+            diagnostics.error(f"--source-map[{index}]", "must include a path")
+            continue
+        if not Path(raw_path).is_absolute():
+            diagnostics.error(f"--source-map[{index}]", "path must be absolute")
+            continue
+        if source_id in result:
+            diagnostics.error(f"--source-map[{index}]", f"duplicate source ID `{source_id}`")
+            continue
+        result[source_id] = Path(raw_path).resolve()
+    return result
 
 
 def main() -> int:
     args = parse_args()
     diagnostics = Diagnostics()
-    bundle = validate(args.artifact_root.resolve(), args.source_root.resolve(), args.pre_finalize, diagnostics)
+    source_maps = parse_source_maps(args.source_map, diagnostics)
+    bundle = validate(
+        args.artifact_root.resolve(),
+        args.source_root.resolve(),
+        args.pre_finalize,
+        diagnostics,
+        source_maps,
+    )
     for warning in diagnostics.warnings:
         print(f"WARNING {warning}")
     for error in diagnostics.errors:

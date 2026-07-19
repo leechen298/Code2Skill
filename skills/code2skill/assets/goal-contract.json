@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "vNext",
+  "contractId": "synthetic-sample-request",
+  "canonicalContractRef": "canonical-contract.json",
+  "goals": [
+    {
+      "goalId": "prepare-sample-request",
+      "intent": "Collect and validate enough current information without submitting.",
+      "informationNeeds": [
+        {
+          "informationId": "current-selection",
+          "classification": "dynamic",
+          "satisfiedBy": [{"kind": "capability", "capabilityId": "list-sample-request-kinds", "outputPath": ["options", "*", "selectionGrant"]}],
+          "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true}
+        },
+        {
+          "informationId": "request-data",
+          "classification": "required",
+          "satisfiedBy": [{"kind": "user"}, {"kind": "trusted-host-context"}],
+          "reuseWhile": {"notEdited": true}
+        },
+        {
+          "informationId": "approved-attachments",
+          "classification": "requiredWhen",
+          "condition": {"path": ["current-selection", "requiresAttachment"], "operator": "equals", "value": true},
+          "satisfiedBy": [{"kind": "capability", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"]}],
+          "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true, "notConsumed": true}
+        }
+      ],
+      "completionPredicate": {"operator": "all-satisfied", "informationIds": ["current-selection", "request-data", "approved-attachments"], "conditionalNeedsOnlyWhenActive": true},
+      "requiredCapabilityIds": ["list-sample-request-kinds", "validate-sample-request"],
+      "conditionalCapabilityIds": ["upload-sample-attachment"],
+      "optionalCapabilityIds": ["upload-sample-attachment"],
+      "agentPolicy": {"acceptInformationInAnyOrder": true, "reuseFreshInformation": true, "askOnlyCurrentlyMissing": true, "skipUnnecessaryCapabilities": true, "stopWhenPredicateSatisfied": true},
+      "hardConstraints": ["dynamic-selection-must-be-current", "derived-values-must-come-from-declared-source"]
+    },
+    {
+      "goalId": "submit-sample-request",
+      "intent": "Create one request after information, validation, and trusted confirmation are complete.",
+      "informationNeeds": [
+        {
+          "informationId": "validated-payload",
+          "classification": "derived",
+          "satisfiedBy": [{"kind": "capability", "capabilityId": "validate-sample-request", "outputPath": ["validationGrant"]}],
+          "reuseWhile": {"sameSubject": true, "sameSession": true, "samePayloadDigest": true, "notExpired": true, "notConsumed": true}
+        },
+        {
+          "informationId": "trusted-confirmation",
+          "classification": "derived",
+          "satisfiedBy": [{"kind": "trusted-host-context"}],
+          "reuseWhile": {"sameSubject": true, "sameSession": true, "samePayloadDigest": true, "notExpired": true, "notConsumed": true}
+        }
+      ],
+      "completionPredicate": {"operator": "workflow-completed", "workflowId": "submit-sample-request"},
+      "requiredCapabilityIds": ["validate-sample-request", "submit-sample-request"],
+      "conditionalCapabilityIds": ["upload-sample-attachment"],
+      "optionalCapabilityIds": ["list-sample-request-kinds", "upload-sample-attachment"],
+      "agentPolicy": {"acceptInformationInAnyOrder": true, "reuseFreshInformation": true, "askOnlyCurrentlyMissing": true, "skipUnnecessaryCapabilities": true, "stopWhenPredicateSatisfied": true},
+      "hardConstraints": ["payload-equals-validated-payload", "trusted-confirmation-before-dispatch", "at-most-once-dispatch", "unknown-outcome-stop-and-reconcile"]
+    }
+  ]
+}

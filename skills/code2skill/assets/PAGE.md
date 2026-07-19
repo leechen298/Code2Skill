@@ -1,18 +1,20 @@
 ---
-name: knowledge-search
-title: 知识内容检索与详情阅读页面说明
-description: 说明用户如何在知识页面筛选内容、读取详情，并帮助 Agent 判断可以调用哪些只读能力以及何时停止。
-route: /knowledge
+name: sample-request
+title: 合成请求后端能力与安全边界说明
+description: 说明一个没有前端页面的合成后端能力如何暴露查询、校验和受保护写入，并帮助 Agent 判断可调用能力、必要宿主设施与停止条件。
+surface: backend-api
+surface-id: sample-request
+route: /__code2skill__/features/sample-request
 language: zh-CN
 ---
 
-# 知识内容检索页面
+# 合成请求后端能力
 
 > 这是结构模板。生成时必须用源码事实扩展至严格长度要求，并删除这条说明。
 
 ## 页面定位
 
-<说明业务目的、目标用户和只读或写入边界。>
+<说明真实 feature surface；没有页面时明确写 API、RPC、消息、worker 或其他后端表面。`route` 只是 node-stdio 文档标识，不是运行时地址。>
 
 ## 典型用户目标
 
@@ -20,7 +22,7 @@ language: zh-CN
 
 ## 页面区域与业务信息
 
-<说明字段、列表、详情和状态的业务含义。>
+<有页面时说明区域；route-less feature 改为说明入口、请求/消息、状态、结果及其业务含义，不得虚构界面。>
 
 ## 动态依赖与失效规则
 
@@ -33,6 +35,10 @@ language: zh-CN
 ## Agent 使用边界
 
 <说明不得越过的能力和运行时约束。>
+
+## 副作用与确认
+
+<只读 feature 明确说明没有写入。存在写 Tool 时，每个 Tool 单独一行，例如：`<write_tool>` 只能在可信 Host 确认和运行时 Guard 通过后派发；不得自动重试；派发结果未知或不确定时必须停止并对账。生成时删除不适用的占位内容。>
 
 ## 不属于本页面的能力
 

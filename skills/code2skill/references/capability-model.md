@@ -4,6 +4,12 @@
 
 | Concept | Code2Skill definition |
 | --- | --- |
+| Producer | The coding Agent that searches authorized source roots, builds contracts and generates/tests artifacts. |
+| Consumer Host | The later Agent runtime that discovers the Skill, interacts with the user and invokes capabilities. It may not have Producer capabilities. |
+| Portable Core | Language-, framework-, Runtime- and Host-independent business facts used by every generated delivery surface. |
+| Canonical Contract | The single evidence-backed authority for capability inputs, outputs, rules, value domains, execution boundaries, safety policy and verification targets. |
+| Goal Contract | The user's outcome, required/conditional/derived/dynamic information, acquisition options and completion predicate. |
+| Capability Graph | The handoffs, optional dependencies, stopping points and hard prerequisites between capabilities. It is not automatically a linear workflow. |
 | MCP | The protocol through which an Agent host discovers context and invokes external capabilities. |
 | MCP Server | A service exposing one or more Tools, Resources, or Prompts. |
 | Feature Context | Evidence-backed business knowledge extracted from code: purpose, concepts, fields, states, rules, permissions, failures, and original behavior. It is knowledge, not a fourth MCP primitive. |
@@ -13,10 +19,13 @@
 | Observed Skill | Usage knowledge reconstructed from an existing application flow and grounded in code evidence. |
 | Derived Skill | A new composition of existing Context and Tools that is not proven to exist in the source application. |
 | Deterministic workflow | Runtime code that enforces ordering, transactionality, safety, or consistency that must not depend on Agent compliance. |
+| Runtime Profile | A concrete implementation and packaging choice for the Portable Core, such as the current `node-stdio` profile. |
 
 ## Governing principle
 
-MCP Tools answer **what can execute**. Feature Context answers **what the capability means**. Skills answer **when and how capabilities can be selected and combined**. The Agent decides the composition for the current user goal. Runtime code enforces rules the Agent must not bypass.
+MCP Tools answer **what can execute**. Feature Context answers **what the capability means**. Goal Contract answers **what information and conditions complete the user's goal**. Skills answer **when and how capabilities can be selected and combined**. The Consumer Agent decides the composition for the current goal. Runtime code enforces rules the Agent must not bypass.
+
+The Producer's ability to read code or run commands is not part of the generated capability. Consumer requirements must be declared separately and checked against the actual Host.
 
 ## Capability boundary test
 
@@ -59,6 +68,26 @@ Represent such rules twice when useful:
 - enforce it with schema constraints, signed or opaque values, handler validation, server state, authorization, or a deterministic workflow.
 
 Never rely on prose alone for a non-bypassable rule.
+
+## Information requirement semantics
+
+Do not require the user to provide every input in the first message. For each goal, distinguish:
+
+- always-required information;
+- conditionally required or forbidden information;
+- optional information;
+- derived information that must come from a trusted computation or prior result;
+- dynamic information scoped to a current identity, tenant, session, version, or validity window.
+
+The Agent should reuse still-valid known information, call safe read capabilities when they can fill gaps, and ask only for missing values that cannot be obtained safely. Recompute the missing set when a condition changes or dynamic information expires. A completion predicate, not a fixed transcript, decides when the goal is ready.
+
+## Capability graph semantics
+
+Model observed handoffs and dependencies in the Canonical Contract's `capabilityGraph`. A graph edge can describe a reusable handoff, an optional acquisition path, or a hard runtime prerequisite. Only the last category belongs in a deterministic workflow.
+
+Compositions proven in source are `observed`. A new but contract-compatible combination is a `derived composition`; it requires separate verification and must not be described as source behavior. Flexible read-only composition is allowed when authorization and contracts permit it. A derived write composition still needs every original runtime guard.
+
+Dynamic catalogs are not static enums. A set observed for one user, tenant, environment, or time is only a sample unless source evidence proves a stable closed domain.
 
 ## Origin and confidence
 

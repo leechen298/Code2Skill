@@ -6,15 +6,17 @@
 
 ## Actors and permissions
 
-| Actor | Permission or role | Evidence status | Evidence |
-| --- | --- | --- | --- |
-| <actor> | <permission> | fact/inference/unknown | `<path>#<symbol>` |
+| Actor | Permission or role | Assertion level | Evidence ID | Source ID | Portable locator |
+| --- | --- | --- | --- | --- | --- |
+| <actor> | <permission> | fact/inference/unknown | `ev-<stable-id>` | `<sourceId>` | `<relative-path>#<symbol>` |
 
 ## Domain concepts and field semantics
 
-| Concept or field | Business meaning | Source or allowed values | Evidence status | Evidence |
-| --- | --- | --- | --- | --- |
-| <field> | <meaning> | <source> | fact/inference/unknown | `<path>#<symbol>` |
+| Concept or field | Business meaning | Source or allowed values | Assertion level | Evidence ID | Source ID | Portable locator |
+| --- | --- | --- | --- | --- | --- | --- |
+| <field> | <meaning> | <source> | fact/inference/unknown | `ev-<stable-id>` | `<sourceId>` | `<relative-path>#<symbol>` |
+
+Every evidence ID above must exist exactly once in `canonical-contract.json.evidenceCatalog`. Never use an absolute machine path or a path without its authorized `sourceId` in a multi-root feature.
 
 ## States and business rules
 

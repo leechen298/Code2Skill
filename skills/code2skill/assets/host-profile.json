@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "vNext",
+  "profileId": "generic-limited-consumer",
+  "description": "Synthetic capability profile used to demonstrate deterministic, brand-neutral degradation.",
+  "capabilities": {
+    "agentSkillsDiscovery": {
+      "status": "supported",
+      "details": "Discovers portable Skill instructions."
+    },
+    "mcpToolInvocation": {
+      "status": "supported",
+      "transports": ["stdio"],
+      "runtimes": ["ecmascript-module"]
+    },
+    "authenticationInjection": {
+      "status": "supported",
+      "details": "Injects identity into protected runtime context, not public Tool arguments."
+    },
+    "trustedConfirmation": {
+      "status": "external-integration",
+      "details": "Requires a deployment-owned confirmation adapter."
+    },
+    "sessionState": {
+      "status": "supported",
+      "details": "Provides isolated expiring session state and atomic single-use consumption."
+    },
+    "attachmentResolution": {
+      "status": "unsupported",
+      "details": "Cannot resolve user-approved attachment references."
+    },
+    "secureUpload": {
+      "status": "external-integration",
+      "details": "Requires an approved attachment bridge."
+    },
+    "unknownOutcomeReconciliation": {
+      "status": "supported",
+      "details": "Can stop, record uncertainty, and reconcile before a later attempt."
+    }
+  }
+}

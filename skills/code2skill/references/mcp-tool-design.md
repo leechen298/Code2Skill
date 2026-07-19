@@ -1,5 +1,11 @@
 # MCP Tool design
 
+## Portable contract and Runtime Profile
+
+Choose Tool boundaries and business contracts in `canonical-contract.json` before choosing a language, SDK, schema library, or transport. The Canonical Contract is portable; a Runtime Profile is an adapter that must preserve its names, requiredness, value domains, failure behavior, side effects, confirmation policy, and hard preconditions.
+
+The current `strict-export-v1` package is the supported `node-stdio` Runtime Profile. Requirements below that mention Node, Zod, literal `registerTool`, or stdio are requirements of this profile, not universal facts about all future Code2Skill consumers. Another profile must pass behavior-equivalence checks against the same Canonical Contract.
+
 ## Public Tool contract
 
 Define for each Tool:
@@ -9,11 +15,13 @@ Define for each Tool:
 - input schema with semantic descriptions, required fields, enums, and bounds;
 - output schema or a documented stable result shape;
 - context references;
-- side-effect class: `none`, `write`, `destructive`, `financial`, or `external`;
+- Canonical `sideEffect`: `read`, `create`, `update`, or `delete`; describe destructive, financial, publishing, or external risk separately in annotations, operation summaries, and hard workflows rather than replacing this closed vocabulary;
 - authentication, authorization, and tenant behavior;
 - runtime-enforced preconditions and source constraints;
 - typed or machine-distinguishable errors;
 - code and test evidence.
+
+Generate or deterministically check this public contract from the Canonical Contract. Function, MCP schema, documentation, and tests must not independently reinterpret input requiredness or output meaning.
 
 Expose one explicit handler per Tool. Shared internal helpers are encouraged. A single generic handler that accepts an operation name is not.
 
@@ -66,6 +74,8 @@ The Skill should explain the constraint and recovery path, but must not be its o
 
 Unknown Tool names and malformed JSON-RPC are protocol errors. Valid Tool calls with schema, business, authorization, or upstream failures are Tool execution errors (for example `isError: true`). Preserve that distinction so clients can recover correctly.
 
+Static schema checks are only one enforcement option. Dynamic value domains, identity-scoped selections, conditional requiredness, derived values, attachment grants, expiry, and single-use rules usually require handler, authoritative API, or session/workflow enforcement. A value seen in one live response is not a stable enum.
+
 For HTTP capabilities, treat each declared success status as part of the public contract. Compare the observed `response.status` against that exact set; do not collapse the contract to `response.ok`. Validate the smallest source-proven usable output, including fixed discriminator values or non-empty collections only when the executable source proves those invariants.
 
 The dry-run branch is an inspectable execution boundary. Use the exact variable from `export-profile.json` in a literal `process.env.<declared-variable> === "1"` guard before calling the named Function. Return `dryRun`, `validatedInput`, `operationPolicy`, and `operationSummary` derived from the capability and request plan, with no external request.
@@ -83,19 +93,34 @@ Every side-effecting Tool must declare this manifest policy:
 ```json
 {
   "operationPolicy": {
-    "confirmationOwner": "host",
-    "idempotency": "non-idempotent",
+    "sideEffect": "create",
+    "idempotency": "at-most-once",
     "automaticRetry": "never",
-    "unknownOutcome": "Stop and require an operation-status lookup or human reconciliation."
+    "confirmation": "trusted-confirmation-required",
+    "unknownOutcome": "stop-and-reconcile"
   }
 }
 ```
 
-Allowed confirmation owners are `host`, `runtime`, and `not-required`. A Tool parameter such as `confirmed: true` is Agent self-attestation, not confirmation. Do not expose such a parameter as evidence of consent. Host confirmation for a risky operation should bind at least the target, payload digest, relevant preview/check token, and side-effect summary. If the Host/runtime integration is unavailable, keep the operation in `requires-review` status.
+`operationPolicy.sideEffect` must equal the capability's top-level `sideEffect`. Allowed confirmation requirements are `not-required`, `trusted-confirmation-required`, and `upload-confirmation-required`. The actual enforcement owner is declared separately through Consumer requirements and `workflows[].enforcement.owner`; do not introduce a competing `confirmationOwner` field. A Tool parameter such as `confirmed: true` is Agent self-attestation, not confirmation. Host confirmation for a risky operation should bind at least the target, payload digest, relevant preview/check token, and side-effect summary. If the Host/runtime integration is unavailable, keep the operation in `requires-review` status.
 
 Set automatic retry to `never` for non-idempotent or unknown-idempotency operations. On a timeout, disconnect, or lost response after dispatch, report the outcome as unknown and require reconciliation before another attempt.
 
 For non-idempotent chains such as validate → confirm → create, emit and test a deterministic workflow or Host integration contract. A short-lived confirmation grant should be bound to user/session, target, payload digest, validation token, expiry, and single use. If the runtime cannot enforce that contract, mark the write path `requires-review`.
+
+## Attachments
+
+Treat attachment acquisition and upload as a capability chain, not merely as a string URL input. The chain may include a Host-approved attachment reference, bounded metadata/content resolution, upload authorization, transfer, returned token/URL, and downstream binding.
+
+Never accept an arbitrary local filesystem path. A public input may accept a Host-approved opaque reference, or bounded logical values such as sanitized filename, media type, size, digest, and content. Runtime enforcement must prove that downstream attachment values came from the approved upload path when the business rule requires it.
+
+Declare attachment resolution and secure upload in `consumer-requirements.json`. If the actual `host-profile.json` lacks either capability, `host-compatibility-report.json` must disable or mark attachment-dependent capabilities `requires-host-integration` while leaving unrelated capabilities available.
+
+## Consumer capability requirements
+
+Do not branch behavior by Host brand. Describe the required facilities: Skill discovery, MCP transport/runtime, authentication injection, trusted confirmation, session state, attachment resolution, secure upload, and unknown-outcome reconciliation. Determine availability by comparing `consumer-requirements.json` with the deployment's `host-profile.json`.
+
+Host incompatibility is capability-specific. Missing trusted confirmation disables protected final writes; missing session state disables workflows that depend on bound one-time grants; missing attachment support disables attachment-dependent paths. Never weaken the business contract to make an incompatible Host appear supported.
 
 ## Anti-patterns
 

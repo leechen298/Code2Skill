@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://code2skill.example/schemas/verification-report-vnext.json",
+  "title": "Code2Skill vNext capability-scoped verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "contractId", "status", "checks", "capabilities", "workflows"],
+  "properties": {
+    "schemaVersion": {"const": "vNext"},
+    "contractId": {"type": "string", "minLength": 1},
+    "status": {"enum": ["passed", "partial"]},
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/passedExecutedCheck"}
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/capabilityRecord"}
+    },
+    "workflows": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/workflowRecord"}
+    }
+  },
+  "$defs": {
+    "executedCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "command", "exitCode", "status", "evidenceHash"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "checkId": {"type": "string", "minLength": 1},
+        "layer": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "minLength": 1},
+        "exitCode": {"type": "integer", "minimum": 0},
+        "status": {"enum": ["passed", "failed"]},
+        "evidenceHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "toolName": {"type": "string", "minLength": 1},
+        "inputHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "resultHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "zeroExternalWrites": {"type": "boolean"}
+      }
+    },
+    "passedExecutedCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/executedCheck"},
+        {"type": "object", "properties": {"status": {"const": "passed"}}}
+      ]
+    },
+    "passedRuntimeCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/passedExecutedCheck"},
+        {"type": "object", "required": ["toolName", "inputHash", "resultHash"]}
+      ]
+    },
+    "passedBypassCheck": {
+      "allOf": [
+        {"$ref": "#/$defs/passedExecutedCheck"},
+        {
+          "type": "object",
+          "required": ["zeroExternalWrites"],
+          "properties": {"zeroExternalWrites": {"const": true}}
+        }
+      ]
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checks"],
+      "properties": {
+        "status": {"enum": ["passed", "failed", "not-run", "requires-review", "blocked"]},
+        "checks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/executedCheck"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "passed"}}, "required": ["status"]},
+          "then": {
+            "properties": {
+              "checks": {
+                "minItems": 1,
+                "items": {"$ref": "#/$defs/passedExecutedCheck"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "runtimePhase": {
+      "allOf": [
+        {"$ref": "#/$defs/phase"},
+        {
+          "if": {"properties": {"status": {"const": "passed"}}, "required": ["status"]},
+          "then": {
+            "properties": {
+              "checks": {
+                "minItems": 1,
+                "items": {"$ref": "#/$defs/passedRuntimeCheck"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "bypassPhase": {
+      "allOf": [
+        {"$ref": "#/$defs/phase"},
+        {
+          "if": {"properties": {"status": {"const": "passed"}}, "required": ["status"]},
+          "then": {
+            "properties": {
+              "checks": {
+                "minItems": 1,
+                "items": {"$ref": "#/$defs/passedBypassCheck"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "capabilityRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "behavior", "runtime", "host"],
+      "properties": {
+        "capabilityId": {"type": "string", "minLength": 1},
+        "behavior": {"$ref": "#/$defs/phase"},
+        "runtime": {"$ref": "#/$defs/runtimePhase"},
+        "host": {"$ref": "#/$defs/phase"}
+      }
+    },
+    "workflowRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflowId", "bypass", "runtime", "host"],
+      "properties": {
+        "workflowId": {"type": "string", "minLength": 1},
+        "bypass": {"$ref": "#/$defs/bypassPhase"},
+        "runtime": {"$ref": "#/$defs/runtimePhase"},
+        "host": {"$ref": "#/$defs/phase"}
+      }
+    }
+  }
+}

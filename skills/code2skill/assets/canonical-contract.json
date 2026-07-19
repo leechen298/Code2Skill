@@ -1,0 +1,533 @@
+{
+  "schemaVersion": "vNext",
+  "contractId": "synthetic-sample-request",
+  "recordingId": "source-analysis-synthetic-sample-request",
+  "sourceTopologyRef": "source-topology.json",
+  "portableCore": {
+    "languageBinding": "none",
+    "frameworkBinding": "none",
+    "architectureBinding": "none",
+    "hostBinding": "none",
+    "discoveryBasis": "observable-semantic-evidence"
+  },
+  "conflicts": [
+    {
+      "conflictId": "dynamic-catalog-versus-client-snapshot",
+      "claim": "Whether request kinds are a static client enum or a current identity-scoped catalog.",
+      "status": "resolved",
+      "affectedCapabilityIds": ["list-sample-request-kinds", "validate-sample-request"],
+      "resolution": "Treat the service-issued catalog and selection grant as authoritative; client snapshots are non-authoritative display evidence.",
+      "evidenceRefs": ["ev-client-goal", "ev-contract-catalog", "ev-service-selection"]
+    }
+  ],
+  "evidenceCatalog": [
+    {
+      "evidenceId": "ev-client-goal",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/entry#submitIntent",
+      "semanticRole": "user-entry",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-contract-catalog",
+      "sourceId": "sample-contract",
+      "locator": "contracts/sample-request#listKinds",
+      "semanticRole": "transport-contract",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-service-selection",
+      "sourceId": "sample-service",
+      "locator": "sample-request/rules#validateSelectionGrant",
+      "semanticRole": "validation",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-service-attachment",
+      "sourceId": "sample-service",
+      "locator": "sample-request/attachments#storeApprovedAttachment",
+      "semanticRole": "side-effect",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-service-validation",
+      "sourceId": "sample-service",
+      "locator": "sample-request/validation#issueValidationGrant",
+      "semanticRole": "business-rule",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-service-submit",
+      "sourceId": "sample-service",
+      "locator": "sample-request/commands#submitOnce",
+      "semanticRole": "side-effect",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-service-auth",
+      "sourceId": "sample-service",
+      "locator": "security/current-subject#authorizeSampleRequest",
+      "semanticRole": "authorization",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-contract-errors",
+      "sourceId": "sample-contract",
+      "locator": "contracts/sample-request#errorEnvelope",
+      "semanticRole": "error-contract",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-tests-workflow",
+      "sourceId": "sample-tests",
+      "locator": "sample-request/workflow#rejectBypassBeforeDispatch",
+      "semanticRole": "workflow-test",
+      "assertionLevel": "fact"
+    }
+  ],
+  "server": {
+    "name": "sample-request-capabilities",
+    "description": "Expose a synthetic dynamic catalog, approved attachment upload, validation, and guarded submission.",
+    "evidenceRefs": ["ev-client-goal"]
+  },
+  "capabilities": [
+    {
+      "capabilityId": "list-sample-request-kinds",
+      "toolName": "list_sample_request_kinds",
+      "functionExport": "listSampleRequestKinds",
+      "description": "List the current subject's dynamically available request kinds and issue selection grants.",
+      "authentication": "runtime_context",
+      "readiness": "ready",
+      "missingEvidence": [],
+      "inputs": [
+        {
+          "name": "detailLevel",
+          "description": "Optional source-defined projection level for the returned dynamic catalog.",
+          "type": "string",
+          "required": false,
+          "informationClass": "optional",
+          "sourceStrategies": ["user"],
+          "valueDomain": {"kind": "static", "values": ["compact", "full"], "evidenceRefs": ["ev-contract-catalog"]},
+          "requiredWhen": [],
+          "forbiddenWhen": [],
+          "freshness": {"refreshWhen": ["user-changed-preference"]},
+          "evidenceRefs": ["ev-contract-catalog"]
+        }
+      ],
+      "outputs": [
+        {
+          "path": ["options"],
+          "description": "Current options with display data, conditions, and opaque selection grants.",
+          "valueDomain": {
+            "kind": "dynamic",
+            "identityScoped": true,
+            "tenantScoped": true,
+            "sessionScoped": true,
+            "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "tenant-changed", "expired"]}
+          },
+          "evidenceRefs": ["ev-contract-catalog", "ev-service-selection"]
+        }
+      ],
+      "constraints": [],
+      "attachments": {"mode": "none"},
+      "implementation": {
+        "kind": "http",
+        "steps": [
+          {
+            "stepId": "listKinds",
+            "method": "GET",
+            "authentication": "runtime_context",
+            "url": "https://application.example/api/sample-request/kinds",
+            "headers": {"accept": "application/json"},
+            "bindings": [
+              {"source": {"kind": "input", "inputName": "detailLevel"}, "location": "query", "path": ["detail"], "evidenceRefs": ["ev-contract-catalog"]}
+            ],
+            "successStatusCodes": [200],
+            "evidenceRefs": ["ev-contract-catalog"]
+          }
+        ],
+        "outputStepId": "listKinds"
+      },
+      "successRule": {
+        "kind": "http_status_and_output",
+        "outputRequired": true,
+        "forbiddenOutputKeys": ["error", "errors"],
+        "requiredOutputPaths": [["options"]],
+        "evidenceRefs": ["ev-contract-catalog", "ev-contract-errors"]
+      },
+      "operationPolicy": {
+        "sideEffect": "read",
+        "idempotency": "safe",
+        "automaticRetry": "read-only-bounded",
+        "confirmation": "not-required",
+        "unknownOutcome": "not-applicable"
+      },
+      "sideEffect": "read",
+      "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "session-state"],
+      "evidenceCoverage": {},
+      "verificationChecks": ["dynamic-values-are-not-frozen", "identity-change-invalidates-selection-grants"],
+      "evidenceRefs": ["ev-contract-catalog", "ev-service-selection"]
+    },
+    {
+      "capabilityId": "upload-sample-attachment",
+      "toolName": "upload_sample_attachment",
+      "functionExport": "uploadSampleAttachment",
+      "description": "Resolve one host-approved attachment and upload bounded content without accepting a local file path.",
+      "authentication": "runtime_context",
+      "readiness": "ready",
+      "missingEvidence": [],
+      "inputs": [
+        {
+          "name": "hostAttachmentGrant",
+          "description": "Opaque grant for one user-approved attachment, including bounded metadata and content access.",
+          "type": "object",
+          "required": true,
+          "informationClass": "attachment",
+          "sourceStrategies": ["host-approved-attachment"],
+          "valueDomain": {"kind": "unconstrained"},
+          "requiredWhen": [],
+          "forbiddenWhen": [],
+          "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired"]},
+          "evidenceRefs": ["ev-service-attachment"]
+        }
+      ],
+      "outputs": [
+        {
+          "path": ["uploadedAttachmentGrant"],
+          "description": "Opaque, subject- and session-bound upload result grant for downstream validation and submission.",
+          "evidenceRefs": ["ev-service-attachment"]
+        }
+      ],
+      "constraints": [
+        {
+          "constraintId": "forbid-local-file-path",
+          "kind": "forbidden-shape",
+          "path": ["hostAttachmentGrant", "localPath"],
+          "predicate": {"operator": "absent"},
+          "enforcement": "runtime",
+          "evidenceRefs": ["ev-service-attachment"]
+        }
+      ],
+      "attachments": {
+        "mode": "host-approved-reference",
+        "acceptedInputs": ["opaque-host-grant", "bounded-content"],
+        "forbiddenInputs": ["local-path", "unverified-url"],
+        "metadata": {
+          "required": ["fileName", "mediaType", "sizeBytes", "sha256"],
+          "maxSizeBytes": 1048576
+        },
+        "resultBinding": {"kind": "opaque-token", "role": "uploaded-attachment-grant", "subjectScoped": true, "sessionScoped": true, "singleUse": true},
+        "enforcedByWorkflow": "upload-sample-attachment"
+      },
+      "workflowId": "upload-sample-attachment",
+      "implementation": {
+        "kind": "http",
+        "steps": [
+          {
+            "stepId": "uploadAttachment",
+            "method": "POST",
+            "authentication": "runtime_context",
+            "url": "https://application.example/api/sample-request/attachments",
+            "headers": {"accept": "application/json"},
+            "bindings": [
+              {
+                "source": {"kind": "input", "inputName": "hostAttachmentGrant"},
+                "location": "body",
+                "path": ["attachment"],
+                "evidenceRefs": ["ev-service-attachment"]
+              }
+            ],
+            "successStatusCodes": [201],
+            "evidenceRefs": ["ev-service-attachment"]
+          }
+        ],
+        "outputStepId": "uploadAttachment"
+      },
+      "successRule": {
+        "kind": "http_status_and_output",
+        "outputRequired": true,
+        "forbiddenOutputKeys": ["error", "errors"],
+        "requiredOutputPaths": [["uploadedAttachmentGrant"]],
+        "evidenceRefs": ["ev-service-attachment", "ev-contract-errors"]
+      },
+      "operationPolicy": {
+        "sideEffect": "create",
+        "idempotency": "content-hash-deduplicated",
+        "automaticRetry": "never",
+        "confirmation": "upload-confirmation-required",
+        "unknownOutcome": "reconcile-before-any-retry"
+      },
+      "sideEffect": "create",
+      "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "trusted-confirmation", "session-state", "attachment-resolution", "secure-upload", "unknown-outcome-reconciliation"],
+      "evidenceCoverage": {
+        "backendContract": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-attachment"]},
+        "authorization": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-auth"]},
+        "validation": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-attachment"]},
+        "idempotency": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-attachment"]},
+        "unknownOutcome": {"assertionLevel": "fact", "evidenceRefs": ["ev-contract-errors"]}
+      },
+      "verificationChecks": ["reject-local-file-path-before-dispatch", "reject-oversize-before-dispatch", "unknown-upload-outcome-does-not-auto-retry"],
+      "evidenceRefs": ["ev-service-attachment", "ev-service-auth"]
+    },
+    {
+      "capabilityId": "validate-sample-request",
+      "toolName": "validate_sample_request",
+      "functionExport": "validateSampleRequest",
+      "description": "Validate the exact request payload and issue an opaque validation grant without performing the final write.",
+      "authentication": "runtime_context",
+      "readiness": "ready",
+      "missingEvidence": [],
+      "inputs": [
+        {
+          "name": "selectionGrant",
+          "description": "Current dynamic selection issued by list_sample_request_kinds.",
+          "type": "object",
+          "required": true,
+          "informationClass": "dynamic",
+          "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "list-sample-request-kinds", "outputPath": ["options", "*", "selectionGrant"]}],
+          "valueDomain": {
+            "kind": "dynamic",
+            "sourceCapabilityId": "list-sample-request-kinds",
+            "sourcePath": ["options", "*", "selectionGrant"],
+            "identityScoped": true,
+            "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired"]}
+          },
+          "requiredWhen": [],
+          "forbiddenWhen": [],
+          "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired"]},
+          "evidenceRefs": ["ev-service-selection"]
+        },
+        {
+          "name": "requestData",
+          "description": "User-provided request fields that remain unchanged through validation and submission.",
+          "type": "object",
+          "required": true,
+          "informationClass": "required",
+          "sourceStrategies": ["user", "trusted-host-context"],
+          "valueDomain": {"kind": "unconstrained"},
+          "requiredWhen": [],
+          "forbiddenWhen": [],
+          "freshness": {"refreshWhen": ["user-edited"]},
+          "evidenceRefs": ["ev-client-goal", "ev-service-validation"]
+        },
+        {
+          "name": "attachmentGrants",
+          "description": "Approved upload results required only when the current selection declares an attachment requirement.",
+          "type": "array",
+          "required": false,
+          "informationClass": "requiredWhen",
+          "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"]}],
+          "valueDomain": {"kind": "unconstrained"},
+          "requiredWhen": [{"path": ["selectionGrant", "requiresAttachment"], "operator": "equals", "value": true}],
+          "forbiddenWhen": [{"path": ["selectionGrant", "allowsAttachment"], "operator": "equals", "value": false}],
+          "freshness": {"ttlSeconds": 300, "refreshWhen": ["session-changed", "expired", "consumed"]},
+          "evidenceRefs": ["ev-service-attachment", "ev-service-validation"]
+        }
+      ],
+      "outputs": [
+        {"path": ["validationGrant"], "description": "Opaque subject-, session-, and payload-bound validation grant.", "evidenceRefs": ["ev-service-validation"]},
+        {"path": ["payloadDigest"], "description": "Canonical digest of the exact validated payload.", "evidenceRefs": ["ev-service-validation"]}
+      ],
+      "constraints": [
+        {
+          "constraintId": "attachment-required-by-selection",
+          "kind": "cross-field",
+          "if": {"path": ["selectionGrant", "requiresAttachment"], "operator": "equals", "value": true},
+          "then": {"path": ["attachmentGrants"], "operator": "non-empty"},
+          "enforcement": "function-and-runtime",
+          "evidenceRefs": ["ev-service-validation"]
+        }
+      ],
+      "attachments": {"mode": "opaque-upload-results", "forbiddenInputs": ["local-path", "unverified-url"]},
+      "implementation": {
+        "kind": "http",
+        "steps": [
+          {
+            "stepId": "validateRequest",
+            "method": "POST",
+            "authentication": "runtime_context",
+            "url": "https://application.example/api/sample-request/validate",
+            "headers": {"accept": "application/json", "content-type": "application/json"},
+            "bindings": [
+              {"source": {"kind": "input", "inputName": "selectionGrant"}, "location": "body", "path": ["selectionGrant"], "evidenceRefs": ["ev-service-selection"]},
+              {"source": {"kind": "input", "inputName": "requestData"}, "location": "body", "path": ["requestData"], "evidenceRefs": ["ev-service-validation"]},
+              {"source": {"kind": "input", "inputName": "attachmentGrants"}, "location": "body", "path": ["attachmentGrants"], "evidenceRefs": ["ev-service-validation"]}
+            ],
+            "successStatusCodes": [200],
+            "evidenceRefs": ["ev-service-validation"]
+          }
+        ],
+        "outputStepId": "validateRequest"
+      },
+      "successRule": {
+        "kind": "http_status_and_output",
+        "outputRequired": true,
+        "forbiddenOutputKeys": ["error", "errors"],
+        "requiredOutputPaths": [["validationGrant"], ["payloadDigest"]],
+        "evidenceRefs": ["ev-service-validation", "ev-contract-errors"]
+      },
+      "operationPolicy": {
+        "sideEffect": "read",
+        "idempotency": "safe",
+        "automaticRetry": "read-only-bounded",
+        "confirmation": "not-required",
+        "unknownOutcome": "not-applicable"
+      },
+      "sideEffect": "read",
+      "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "session-state"],
+      "evidenceCoverage": {},
+      "verificationChecks": ["different-information-orders-converge", "derived-values-cannot-be-forged", "conditional-attachment-is-enforced"],
+      "evidenceRefs": ["ev-service-selection", "ev-service-validation"]
+    },
+    {
+      "capabilityId": "submit-sample-request",
+      "toolName": "submit_sample_request",
+      "functionExport": "submitSampleRequest",
+      "description": "Submit exactly one previously validated and explicitly confirmed synthetic request.",
+      "authentication": "runtime_context",
+      "readiness": "ready",
+      "missingEvidence": [],
+      "inputs": [
+        {"name": "requestData", "description": "The exact request data previously validated.", "type": "object", "required": true, "informationClass": "required", "sourceStrategies": ["user", "trusted-host-context"], "valueDomain": {"kind": "unconstrained"}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"refreshWhen": ["user-edited"]}, "evidenceRefs": ["ev-service-validation", "ev-service-submit"]},
+        {"name": "validationGrant", "description": "Opaque validation grant bound to subject, session, target, and payload digest.", "type": "object", "required": true, "informationClass": "derived", "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "validate-sample-request", "outputPath": ["validationGrant"]}], "valueDomain": {"kind": "dynamic", "sourceCapabilityId": "validate-sample-request", "sourcePath": ["validationGrant"], "freshness": {"ttlSeconds": 120, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 120, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-service-validation"]},
+        {"name": "confirmationGrant", "description": "Single-use trusted confirmation bound to the same subject, session, target, payload digest, and validation grant.", "type": "object", "required": true, "informationClass": "derived", "sourceStrategies": ["trusted-host-context"], "valueDomain": {"kind": "unconstrained"}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 60, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-tests-workflow"]}
+      ],
+      "outputs": [
+        {"path": ["requestId"], "description": "Stable identifier returned only after a confirmed dispatch result.", "evidenceRefs": ["ev-service-submit"]}
+      ],
+      "constraints": [
+        {"constraintId": "submitted-payload-equals-validated-payload", "kind": "cross-field", "left": {"source": "canonicalDigest", "path": ["requestData"]}, "operator": "equals", "right": {"source": "validationGrant", "path": ["payloadDigest"]}, "enforcement": "runtime-before-dispatch", "evidenceRefs": ["ev-service-validation", "ev-tests-workflow"]},
+        {"constraintId": "confirmation-bound-to-validation", "kind": "grant-binding", "fields": ["subject", "session", "target", "payloadDigest", "validationGrantId"], "enforcement": "runtime-before-dispatch", "evidenceRefs": ["ev-tests-workflow"]}
+      ],
+      "attachments": {"mode": "opaque-upload-results", "forbiddenInputs": ["local-path", "unverified-url"], "enforcedByWorkflow": "submit-sample-request"},
+      "workflowId": "submit-sample-request",
+      "implementation": {
+        "kind": "http",
+        "steps": [
+          {
+            "stepId": "submitRequest",
+            "method": "POST",
+            "authentication": "runtime_context",
+            "url": "https://application.example/api/sample-request",
+            "headers": {"accept": "application/json", "content-type": "application/json"},
+            "bindings": [
+              {"source": {"kind": "input", "inputName": "requestData"}, "location": "body", "path": ["requestData"], "evidenceRefs": ["ev-service-submit"]}
+            ],
+            "successStatusCodes": [201],
+            "evidenceRefs": ["ev-service-submit"]
+          }
+        ],
+        "outputStepId": "submitRequest"
+      },
+      "successRule": {
+        "kind": "http_status_and_output",
+        "outputRequired": true,
+        "forbiddenOutputKeys": ["error", "errors"],
+        "requiredOutputPaths": [["requestId"]],
+        "evidenceRefs": ["ev-service-submit", "ev-contract-errors"]
+      },
+      "operationPolicy": {
+        "sideEffect": "create",
+        "idempotency": "at-most-once",
+        "automaticRetry": "never",
+        "confirmation": "trusted-confirmation-required",
+        "unknownOutcome": "stop-and-reconcile"
+      },
+      "sideEffect": "create",
+      "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "trusted-confirmation", "session-state", "unknown-outcome-reconciliation"],
+      "evidenceCoverage": {
+        "backendContract": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-submit"]},
+        "authorization": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-auth"]},
+        "validation": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-validation"]},
+        "idempotency": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-submit"]},
+        "unknownOutcome": {"assertionLevel": "fact", "evidenceRefs": ["ev-contract-errors"]}
+      },
+      "verificationChecks": ["reject-unvalidated-before-dispatch", "reject-unconfirmed-before-dispatch", "reject-digest-mismatch-before-dispatch", "reject-expired-wrong-subject-wrong-session-or-reused-grants", "unknown-submit-outcome-does-not-auto-retry"],
+      "evidenceRefs": ["ev-service-submit", "ev-service-auth", "ev-tests-workflow"]
+    }
+  ],
+  "handoffs": [
+    {"fromCapabilityId": "list-sample-request-kinds", "toCapabilityId": "validate-sample-request", "mappings": [{"sourcePath": ["options", "*", "selectionGrant"], "targetInput": "selectionGrant"}], "required": true, "evidenceRefs": ["ev-service-selection"]},
+    {"fromCapabilityId": "upload-sample-attachment", "toCapabilityId": "validate-sample-request", "mappings": [{"sourcePath": ["uploadedAttachmentGrant"], "targetInput": "attachmentGrants"}], "required": false, "evidenceRefs": ["ev-service-attachment", "ev-service-validation"]},
+    {"fromCapabilityId": "validate-sample-request", "toCapabilityId": "submit-sample-request", "mappings": [{"sourcePath": ["validationGrant"], "targetInput": "validationGrant"}], "required": true, "evidenceRefs": ["ev-service-validation", "ev-service-submit"]}
+  ],
+  "capabilityGraph": {
+    "nodes": [
+      {"capabilityId": "list-sample-request-kinds", "independentValue": "Answer which current options are available."},
+      {"capabilityId": "upload-sample-attachment", "independentValue": "Prepare one approved attachment for later use."},
+      {"capabilityId": "validate-sample-request", "independentValue": "Explain whether the collected information is ready."},
+      {"capabilityId": "submit-sample-request", "independentValue": "Create one confirmed request."}
+    ],
+    "edges": [
+      {"fromCapabilityId": "list-sample-request-kinds", "toCapabilityId": "validate-sample-request", "kind": "handoff", "composition": "observed", "required": true},
+      {"fromCapabilityId": "upload-sample-attachment", "toCapabilityId": "validate-sample-request", "kind": "conditional-handoff", "composition": "observed", "required": false},
+      {"fromCapabilityId": "validate-sample-request", "toCapabilityId": "submit-sample-request", "kind": "hard-precondition", "composition": "observed", "required": true},
+      {"fromCapabilityId": "list-sample-request-kinds", "toCapabilityId": "upload-sample-attachment", "kind": "optional-planning", "composition": "derived", "required": false}
+    ]
+  },
+  "goals": [
+    {
+      "goalId": "prepare-sample-request",
+      "intent": "Collect and validate enough current information without submitting.",
+      "informationNeeds": [
+        {"informationId": "current-selection", "classification": "dynamic", "satisfiedBy": [{"kind": "capability", "capabilityId": "list-sample-request-kinds", "outputPath": ["options", "*", "selectionGrant"]}], "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true}},
+        {"informationId": "request-data", "classification": "required", "satisfiedBy": [{"kind": "user"}, {"kind": "trusted-host-context"}], "reuseWhile": {"notEdited": true}},
+        {"informationId": "approved-attachments", "classification": "requiredWhen", "condition": {"path": ["current-selection", "requiresAttachment"], "operator": "equals", "value": true}, "satisfiedBy": [{"kind": "capability", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"]}], "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true, "notConsumed": true}}
+      ],
+      "completionPredicate": {"operator": "all-satisfied", "informationIds": ["current-selection", "request-data", "approved-attachments"], "conditionalNeedsOnlyWhenActive": true},
+      "requiredCapabilityIds": ["list-sample-request-kinds", "validate-sample-request"],
+      "conditionalCapabilityIds": ["upload-sample-attachment"],
+      "optionalCapabilityIds": ["upload-sample-attachment"],
+      "agentPolicy": {"acceptInformationInAnyOrder": true, "reuseFreshInformation": true, "askOnlyCurrentlyMissing": true, "skipUnnecessaryCapabilities": true, "stopWhenPredicateSatisfied": true},
+      "hardConstraints": ["dynamic-selection-must-be-current", "derived-values-must-come-from-declared-source"]
+    },
+    {
+      "goalId": "submit-sample-request",
+      "intent": "Create one request after information, validation, and trusted confirmation are complete.",
+      "informationNeeds": [
+        {"informationId": "validated-payload", "classification": "derived", "satisfiedBy": [{"kind": "capability", "capabilityId": "validate-sample-request", "outputPath": ["validationGrant"]}], "reuseWhile": {"sameSubject": true, "sameSession": true, "samePayloadDigest": true, "notExpired": true, "notConsumed": true}},
+        {"informationId": "trusted-confirmation", "classification": "derived", "satisfiedBy": [{"kind": "trusted-host-context"}], "reuseWhile": {"sameSubject": true, "sameSession": true, "samePayloadDigest": true, "notExpired": true, "notConsumed": true}}
+      ],
+      "completionPredicate": {"operator": "workflow-completed", "workflowId": "submit-sample-request"},
+      "requiredCapabilityIds": ["validate-sample-request", "submit-sample-request"],
+      "conditionalCapabilityIds": ["upload-sample-attachment"],
+      "optionalCapabilityIds": ["list-sample-request-kinds", "upload-sample-attachment"],
+      "agentPolicy": {"acceptInformationInAnyOrder": true, "reuseFreshInformation": true, "askOnlyCurrentlyMissing": true, "skipUnnecessaryCapabilities": true, "stopWhenPredicateSatisfied": true},
+      "hardConstraints": ["payload-equals-validated-payload", "trusted-confirmation-before-dispatch", "at-most-once-dispatch", "unknown-outcome-stop-and-reconcile"]
+    }
+  ],
+  "consumerRequirements": {
+    "requirements": [
+      {"requirementId": "agent-skills-discovery", "hostCapability": "agentSkillsDiscovery", "description": "Discover and apply portable goal, information, composition, and safety guidance.", "onMissing": "requires-host-integration"},
+      {"requirementId": "mcp-tool-invocation", "hostCapability": "mcpToolInvocation", "description": "Invoke a declared Tool transport and preserve structured results.", "onMissing": "disable"},
+      {"requirementId": "authentication-injection", "hostCapability": "authenticationInjection", "description": "Inject current identity without exposing credentials as Tool arguments.", "onMissing": "disable"},
+      {"requirementId": "trusted-confirmation", "hostCapability": "trustedConfirmation", "description": "Issue confirmation bound to subject, session, target, payload digest, validation grant, expiry, and single use.", "onMissing": "disable"},
+      {"requirementId": "session-state", "hostCapability": "sessionState", "description": "Retain and consume protected grants within an isolated session.", "onMissing": "disable"},
+      {"requirementId": "attachment-resolution", "hostCapability": "attachmentResolution", "description": "Resolve only user-approved attachment references and bounded metadata or content.", "onMissing": "requires-host-integration"},
+      {"requirementId": "secure-upload", "hostCapability": "secureUpload", "description": "Upload bounded content without accepting arbitrary local file paths.", "onMissing": "disable"},
+      {"requirementId": "unknown-outcome-reconciliation", "hostCapability": "unknownOutcomeReconciliation", "description": "Reconcile an uncertain write result before any later attempt.", "onMissing": "disable"}
+    ]
+  },
+  "workflows": [
+    {
+      "workflowId": "upload-sample-attachment",
+      "kind": "deterministic-write-guard",
+      "guardAsset": "portable-workflow-guard.mjs#dispatchUploadOnce",
+      "entryCapabilityId": "upload-sample-attachment",
+      "bindings": ["subject", "session", "target", "attachmentGrantId", "fileName", "mediaType", "sizeBytes", "sha256", "confirmationGrantId", "expiresAt", "singleUse"],
+      "enforcement": {"owner": "mcp-session-runtime", "mustCompleteBeforeDispatch": true, "rejectWithoutDispatch": true},
+      "unknownOutcomePolicy": "stop-and-reconcile-before-any-new-attempt",
+      "verificationChecks": ["missing-attachment-grant-causes-zero-dispatch", "local-path-causes-zero-dispatch", "metadata-or-hash-mismatch-causes-zero-dispatch", "missing-upload-confirmation-causes-zero-dispatch", "expired-grant-causes-zero-dispatch", "wrong-subject-causes-zero-dispatch", "wrong-session-causes-zero-dispatch", "reused-grant-causes-zero-dispatch", "unknown-upload-outcome-does-not-auto-retry"]
+    },
+    {
+      "workflowId": "submit-sample-request",
+      "kind": "deterministic-write-guard",
+      "guardAsset": "portable-workflow-guard.mjs",
+      "entryCapabilityId": "submit-sample-request",
+      "bindings": ["subject", "session", "target", "payloadDigest", "validationGrantId", "attachmentGrantIds", "confirmationGrantId", "expiresAt", "singleUse"],
+      "enforcement": {"owner": "mcp-session-runtime", "mustCompleteBeforeDispatch": true, "rejectWithoutDispatch": true},
+      "unknownOutcomePolicy": "stop-and-reconcile-before-any-new-attempt",
+      "verificationChecks": ["missing-validation-grant-causes-zero-dispatch", "missing-confirmation-grant-causes-zero-dispatch", "payload-mismatch-causes-zero-dispatch", "expired-grant-causes-zero-dispatch", "wrong-subject-causes-zero-dispatch", "wrong-session-causes-zero-dispatch", "reused-grant-causes-zero-dispatch", "unapproved-attachment-causes-zero-dispatch"]
+    }
+  ]
+}

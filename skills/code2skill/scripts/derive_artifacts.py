@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Derive strict-export artifacts that must mechanically mirror a bundle."""
+"""Deterministically derive legacy and vNext Code2Skill artifact views."""
 
 from __future__ import annotations
 
@@ -7,6 +7,17 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any
+
+from contract_model import (
+    ContractError,
+    derive_bundle,
+    derive_consumer_requirements,
+    derive_goal_contract,
+    derive_host_compatibility,
+    derive_verification_matrix,
+    validate_canonical_contract,
+    validate_source_topology,
+)
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -27,8 +38,16 @@ def evidence(value: Any, fallback: list[str]) -> list[str]:
     return fallback
 
 
-def derive_draft(bundle: dict[str, Any]) -> dict[str, Any]:
+def derive_draft(
+    bundle: dict[str, Any],
+    canonical_contract: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     capabilities = [item for item in bundle.get("capabilities", []) if isinstance(item, dict)]
+    canonical_by_id = {
+        item.get("capabilityId"): item
+        for item in (canonical_contract or {}).get("capabilities", [])
+        if isinstance(item, dict)
+    }
     by_id = {item.get("capabilityId"): item for item in capabilities}
     handoffs = [item for item in bundle.get("handoffs", []) if isinstance(item, dict)]
     inputs: list[dict[str, Any]] = []
@@ -42,18 +61,36 @@ def derive_draft(bundle: dict[str, Any]) -> dict[str, Any]:
             continue
         capability_refs = evidence(capability.get("evidenceRefs"), ["source-contract-ledger"])
         capability_id = capability.get("capabilityId")
+        canonical_capability = canonical_by_id.get(capability_id, {})
+        canonical_inputs = {
+            item.get("name"): item
+            for item in canonical_capability.get("inputs", [])
+            if isinstance(item, dict)
+        }
         for item in capability.get("inputs", []):
             if not isinstance(item, dict) or not isinstance(item.get("name"), str):
                 continue
             name = item["name"]
             qualified = f"tools.{tool}.input.{name}"
             refs = evidence(item.get("evidenceRefs"), capability_refs)
-            inputs.append({
+            derived_input = {
                 "name": qualified,
                 "valueType": item.get("type"),
                 "required": item.get("required"),
                 "evidenceRefs": refs,
-            })
+            }
+            canonical_input = canonical_inputs.get(name, {})
+            for field in (
+                "informationClass",
+                "sourceStrategies",
+                "valueDomain",
+                "requiredWhen",
+                "forbiddenWhen",
+                "freshness",
+            ):
+                if field in canonical_input:
+                    derived_input[field] = canonical_input[field]
+            inputs.append(derived_input)
 
             matched_handoff = None
             matched_mapping = None
@@ -76,6 +113,25 @@ def derive_draft(bundle: dict[str, Any]) -> dict[str, Any]:
                 source = "prior_response"
                 detail = f"prior_response:{source_tool}:{pointer}"
                 refs = evidence(matched_handoff.get("evidenceRefs"), refs)
+            elif canonical_contract is not None:
+                strategies = canonical_input.get("sourceStrategies", [])
+                strategy_kinds = [
+                    value if isinstance(value, str) else value.get("kind")
+                    for value in strategies
+                    if isinstance(value, (str, dict))
+                ]
+                if "user" in strategy_kinds:
+                    source = "provided"
+                    detail = "direct Tool argument supplied by the user or trusted caller"
+                elif any(value in {"trusted-host-context", "host-approved-attachment", "bounded-content"} for value in strategy_kinds):
+                    source = "context"
+                    detail = "trusted Consumer Host context"
+                elif "derived-calculation" in strategy_kinds:
+                    source = "context"
+                    detail = "protected runtime derivation"
+                else:
+                    source = "provided"
+                    detail = "direct Tool argument"
             elif "runtime_context" in str(capability.get("authentication", "")):
                 source = "context"
                 detail = "trusted MCP runtime context"
@@ -120,15 +176,63 @@ def derive_draft(bundle: dict[str, Any]) -> dict[str, Any]:
             })
             order += 1
 
+    missing_evidence: list[str] = []
+    readiness = "ready"
+    if canonical_contract is not None:
+        for capability in canonical_contract.get("capabilities", []):
+            if not isinstance(capability, dict):
+                continue
+            missing_evidence.extend(
+                item for item in capability.get("missingEvidence", [])
+                if isinstance(item, str) and item not in missing_evidence
+            )
+            if capability.get("readiness") == "blocked":
+                readiness = "blocked"
+            elif capability.get("readiness") == "requires-review" and readiness != "blocked":
+                readiness = "requires-review"
+        if missing_evidence and readiness == "ready":
+            readiness = "requires-review"
+
     return {
         "schemaVersion": "v1",
         "recordingId": bundle.get("recordingId"),
-        "status": "ready",
+        "status": readiness,
         "inputs": inputs,
         "provenance": provenance,
         "requestChain": request_chain,
-        "missingEvidence": [],
+        "missingEvidence": missing_evidence,
     }
+
+
+def derive_vnext(root: Path) -> list[str]:
+    topology = read_json(root / "source-topology.json")
+    contract = read_json(root / "canonical-contract.json")
+    host_profile = read_json(root / "host-profile.json")
+    source_ids = validate_source_topology(topology)
+    validate_canonical_contract(contract, source_ids)
+
+    bundle = derive_bundle(contract)
+    goal_contract = derive_goal_contract(contract)
+    consumer_requirements = derive_consumer_requirements(contract)
+    compatibility = derive_host_compatibility(contract, consumer_requirements, host_profile)
+    verification_matrix = derive_verification_matrix(contract, compatibility)
+
+    write_json(root / "capability-bundle.json", bundle)
+    write_json(root / "function-core" / "capability-bundle.json", bundle)
+    write_json(root / "capability-draft.json", derive_draft(bundle, contract))
+    write_json(root / "goal-contract.json", goal_contract)
+    write_json(root / "consumer-requirements.json", consumer_requirements)
+    write_json(root / "host-compatibility-report.json", compatibility)
+    write_json(root / "verification-matrix.json", verification_matrix)
+    return [
+        "capability-bundle.json",
+        "function-core/capability-bundle.json",
+        "capability-draft.json",
+        "goal-contract.json",
+        "consumer-requirements.json",
+        "host-compatibility-report.json",
+        "verification-matrix.json",
+    ]
 
 
 def main() -> int:
@@ -136,6 +240,14 @@ def main() -> int:
     parser.add_argument("artifact_root", type=Path)
     args = parser.parse_args()
     root = args.artifact_root.resolve()
+    if (root / "canonical-contract.json").is_file():
+        try:
+            generated = derive_vnext(root)
+        except ContractError as error:
+            parser.error(str(error))
+        print("Derived vNext artifacts: " + ", ".join(generated) + ".")
+        return 0
+
     bundle = read_json(root / "capability-bundle.json")
     write_json(root / "function-core" / "capability-bundle.json", bundle)
     write_json(root / "capability-draft.json", derive_draft(bundle))

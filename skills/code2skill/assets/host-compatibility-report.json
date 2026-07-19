@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "vNext",
+  "contractId": "synthetic-sample-request",
+  "consumerRequirementsRef": "consumer-requirements.json",
+  "hostProfileRef": "host-profile.json",
+  "profileId": "generic-limited-consumer",
+  "overallStatus": "compatible-with-restrictions",
+  "capabilityAssessments": [
+    {
+      "capabilityId": "list-sample-request-kinds",
+      "status": "enabled",
+      "missingRequirementIds": [],
+      "externalIntegrationRequirementIds": []
+    },
+    {
+      "capabilityId": "upload-sample-attachment",
+      "status": "requires-host-integration",
+      "missingRequirementIds": ["attachment-resolution"],
+      "externalIntegrationRequirementIds": ["trusted-confirmation", "secure-upload"]
+    },
+    {
+      "capabilityId": "validate-sample-request",
+      "status": "enabled",
+      "missingRequirementIds": [],
+      "externalIntegrationRequirementIds": []
+    },
+    {
+      "capabilityId": "submit-sample-request",
+      "status": "requires-host-integration",
+      "missingRequirementIds": [],
+      "externalIntegrationRequirementIds": ["trusted-confirmation"]
+    }
+  ],
+  "goalAssessments": [
+    {"goalId": "prepare-sample-request", "status": "enabled", "conditionalRestrictions": [{"capabilityId": "upload-sample-attachment", "status": "requires-host-integration"}]},
+    {"goalId": "submit-sample-request", "status": "requires-host-integration", "conditionalRestrictions": [{"capabilityId": "upload-sample-attachment", "status": "requires-host-integration"}]}
+  ]
+}

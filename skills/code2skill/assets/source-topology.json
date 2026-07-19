@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "vNext",
+  "topologyId": "synthetic-sample-request-sources",
+  "authorizationBoundary": {
+    "discoveryPolicy": "explicit-roots-only",
+    "machineWideDiscovery": false,
+    "portableLocatorsOnly": true
+  },
+  "sources": [
+    {
+      "sourceId": "sample-client",
+      "semanticRoles": ["user-entry", "request-construction", "response-consumption"],
+      "root": "sources/client",
+      "availability": "available",
+      "searched": true,
+      "searchSummary": "Synthetic client entry and request construction were inspected."
+    },
+    {
+      "sourceId": "sample-service",
+      "semanticRoles": ["authorization", "validation", "business-rule", "side-effect"],
+      "root": "sources/service",
+      "availability": "available",
+      "searched": true,
+      "searchSummary": "Synthetic service validation, authorization, and write behavior were inspected."
+    },
+    {
+      "sourceId": "sample-contract",
+      "semanticRoles": ["transport-contract", "serialization", "error-contract"],
+      "root": "sources/contract",
+      "availability": "available",
+      "searched": true,
+      "searchSummary": "Synthetic protocol definitions and response shapes were inspected."
+    },
+    {
+      "sourceId": "sample-tests",
+      "semanticRoles": ["behavior-test", "failure-test", "workflow-test"],
+      "root": "sources/tests",
+      "availability": "available",
+      "searched": true,
+      "searchSummary": "Synthetic positive, negative, and bypass tests were inspected."
+    }
+  ],
+  "missingSources": []
+}

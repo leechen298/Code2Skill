@@ -1,10 +1,17 @@
-# Strict export artifact contract
+# `node-stdio` strict export artifact contract
 
-Code2Skill defaults to `strict-export-v1`: a self-contained candidate package that another MCP Host, reviewer, or evaluator can inspect and execute without reading the source repository.
+Code2Skill defaults to `strict-export-v1`, the current `node-stdio` Runtime Profile: a self-contained candidate package that another MCP Host, reviewer, or evaluator can inspect and execute without reading the source repository. Its Portable Core is language- and Host-independent; Node, Zod and stdio requirements apply to this Runtime Profile, not to every future adapter.
 
 ```text
 generated/code2skill/<feature-id>/
 ├── export-profile.json
+├── source-topology.json
+├── canonical-contract.json
+├── goal-contract.json
+├── consumer-requirements.json
+├── host-profile.json
+├── host-compatibility-report.json
+├── verification-matrix.json
 ├── capability-bundle.json
 ├── capability-draft.json
 ├── PAGE.md
@@ -17,24 +24,29 @@ generated/code2skill/<feature-id>/
 ├── mcp-tool/
 │   ├── index.mjs
 │   └── runtime.mjs                # bundled official SDK and schema runtime
-├── workflow.json                 # only when a hard write subgraph exists
+├── portable-workflow-guard.mjs   # vNext writes only
+├── workflow.json                 # legacy bundle-only writes only
 ├── preflight-report.json
 ├── approval-audit.json
 ├── live-verification.json
 └── export-manifest.json
 ```
 
-Do not replace this package with links to runtime code elsewhere. Repository-native code may coexist, but the strict export must contain an executable Function core and stdio MCP entry point.
+Do not replace this package with links to runtime code elsewhere. Repository-native code may coexist, but this Runtime Profile must contain an executable Function core and stdio MCP entry point.
+
+`canonical-contract.json` is the portable authority. `capability-bundle.json` is its `node-stdio` execution view, not a separate place to reinterpret the business contract. The capability graph is embedded in the Canonical Contract.
 
 ## Generation phases
 
-1. **Draft**: produce `export-profile.json`, `capability-draft.json`, the mirrored capability bundle, Function core, MCP runtime, and three documents.
-2. **Pre-finalization validation**: run `validate_artifacts.py --pre-finalize`; build and execute unit/protocol tests.
-3. **Live verification**: exercise at least one real `tools/call` in an appropriate environment and retain sanitized input/result JSON outside the candidate directory.
-4. **Finalization**: run `finalize_export.py` with the executed-check report and real live evidence. The script writes receipts, hashes, approval, and the manifest.
-5. **Final validation**: run `validate_artifacts.py` without `--pre-finalize`.
+1. **Discover**: record every authorized root and missing evidence role in `source-topology.json`.
+2. **Model**: author `canonical-contract.json`, including goals, the capability graph, and Consumer requirement definitions; obtain a deployment `host-profile.json` before executable code is finalized.
+3. **Draft**: derive `goal-contract.json`, `consumer-requirements.json`, Host compatibility, the capability bundle/draft, and initial verification matrix; then build or cross-check the Function core, MCP runtime, and three documents.
+4. **Pre-finalization validation**: run `validate_artifacts.py --pre-finalize`; build and execute unit/protocol tests.
+5. **Live verification**: exercise appropriate real `tools/call` paths and retain capability-scoped sanitized input/result JSON outside the candidate directory.
+6. **Finalization**: run `finalize_export.py` with a vNext report conforming to `assets/verification-report.schema.json` and matching live evidence pairs. The script writes receipts, hashes, capability/workflow status, approval summary, and the manifest.
+7. **Final validation**: run `validate_artifacts.py` without `--pre-finalize`.
 
-Never fabricate passed evidence. If live access is unavailable, leave `live-verification.json` absent or failed, do not approve the package, and report the bundle as generated but not runtime-verified.
+Never fabricate passed evidence. A capability may claim `runtime-verified` only when its own live evidence exists; unavailable live access leaves that row at `requires-review` and prevents a fully approved package summary. Other independently verified capabilities may retain their proven status.
 
 ## Export profile
 
@@ -47,22 +59,28 @@ Never fabricate passed evidence. If live access is unavailable, leave `live-veri
   "protocolVersion": "2025-11-25",
   "transport": "stdio",
   "documentationLanguage": "zh-CN",
+  "featureSurface": {
+    "kind": "route",
+    "identifier": "/knowledge"
+  },
   "pageRoute": "/knowledge",
   "allowedRuntimeOrigins": ["https://application.example"],
   "dryRunEnvironmentVariable": "CODE2SKILL_DRY_RUN"
 }
 ```
 
-Resolve the route and runtime origin from the target repository's public startup/configuration contract. When an external harness supplies a different dry-run variable, route, protocol, language, or allowed origin, record those values in this profile and implement exactly those values. The Function request origin and `allowedRuntimeOrigins` must agree; do not substitute a placeholder or guess evaluator-specific constants.
+Resolve the feature surface and runtime origin from the target repository's public startup/configuration contract. `featureSurface.kind` is `route`, `backend-api`, `rpc`, `message`, `worker`, or `other`; its `identifier` is the source-proven route, operation family, topic/consumer, worker, or equivalent stable feature identity. When no UI route exists, use `/__code2skill__/features/<feature-id>` for `pageRoute` solely because the current Runtime Profile requires a PAGE document key. Repeat that reserved value in PAGE frontmatter, label the real surface separately, and never treat it as a deployed route or Function request URL. When an external harness supplies a different dry-run variable, protocol, language, or allowed origin, record those values and implement exactly them. The Function request origin and `allowedRuntimeOrigins` must agree; do not substitute a placeholder or guess evaluator-specific constants.
 
 ## Capability bundle
 
-`capability-bundle.json` and `function-core/capability-bundle.json` must be equivalent JSON values. Generate the mirror and `capability-draft.json` with `scripts/derive_artifacts.py` after every bundle change instead of maintaining them by hand. Use schema version `v1` and include:
+`capability-bundle.json` and `function-core/capability-bundle.json` must be equivalent JSON values. In vNext, generate both bundles and `capability-draft.json` with `scripts/derive_artifacts.py` after every Canonical Contract change instead of maintaining them by hand. The legacy path remains bundle-first when no Canonical Contract exists. The projected bundle uses schema version `v1` and includes:
 
 - one server with evidence;
 - 1–40 capabilities with unique `capabilityId`, `toolName`, and `functionExport`;
 - explicit authentication, semantic inputs, implementation, success rule, side effect, and evidence for every capability;
 - explicit handoffs for result fields that feed later Tool inputs.
+
+The bundle must agree deterministically with `canonical-contract.json`. Public inputs, requiredness, value domains, handoffs, failures, required outputs, side effects, operation policy, and hard prerequisites cannot diverge. Dynamic values scoped to identity, tenant, session, version, or freshness remain dynamic; one observed response must not become a fixed enum.
 
 Each capability implementation is either:
 
@@ -93,7 +111,7 @@ The Function core is the sole business execution layer for the generated MCP ada
 
 ## MCP runtime
 
-`mcp-tool/index.mjs` is an executable stdio MCP server for protocol `2025-11-25` and exposes exactly the capability bundle's Tool set. In the Node strict profile, use `@modelcontextprotocol/sdk`, `McpServer`, one explicit literal `server.registerTool("tool_name", ...)` call per capability, Zod schemas, and `StdioServerTransport`. Do not register a bundle in a name-driven loop and do not hand-roll the JSON-RPC transport: the literal SDK registration surface is part of static and protocol verification.
+`mcp-tool/index.mjs` is an executable stdio MCP server for protocol `2025-11-25` and exposes exactly the capability bundle's Tool set. In this `node-stdio` profile, use `@modelcontextprotocol/sdk`, `McpServer`, one explicit literal `server.registerTool("tool_name", ...)` call per capability, Zod schemas, and `StdioServerTransport`. Do not register a bundle in a name-driven loop and do not hand-roll the JSON-RPC transport: the literal SDK registration surface is part of static and protocol verification.
 
 The adapter imports `McpServer`, `StdioServerTransport`, and `z` from `./runtime.mjs`. Build `runtime.mjs` from the official SDK/Zod entry template with a bundler, leaving no third-party bare imports. Keep the adapter unbundled so literal registrations, direct input schemas, annotations, callbacks, and named Function imports remain statically inspectable. Verify the copied candidate starts without access to the source repository or its `node_modules`.
 
@@ -111,7 +129,7 @@ Dry-run must use a literal `process.env.<declared-variable> === "1"` guard befor
 
 ## Chinese documents
 
-- `PAGE.md`: 800–3600 characters and 300–1800 Chinese characters. Frontmatter records name, Chinese title/description, exact route, and `zh-CN`. Explain page purpose, user goals, regions/information, dynamic dependencies and invalidation, every Tool, Agent boundaries, excluded abilities, and recommended starting points. Read-only pages explicitly prohibit writes; write pages give one safety block per write Tool.
+- `PAGE.md`: 800–3600 characters and 300–1800 Chinese characters. Frontmatter records name, Chinese title/description, `surface`, `surface-id`, the profile-matching route key, and `zh-CN`. Explain feature purpose, user goals, surface/information, dynamic dependencies and invalidation, every Tool, Agent boundaries, excluded abilities, and recommended starting points. A route-less feature documents its real API/RPC/message/worker surface without inventing UI. Read-only features explicitly prohibit writes; write features give one “副作用与确认” safety line per write Tool, including trusted confirmation, Guard enforcement, no automatic retry, and unknown-outcome reconciliation.
 - `SKILL.md`: Agent Skills-compatible frontmatter plus at least 4000 characters and 1500 Chinese characters. It is guidance, not a forced transcript. Follow [documentation-contract.md](documentation-contract.md).
 - `MCP.zh-CN.md`: at least 8000 characters and 2000 Chinese characters. Document transport/protocol, discovery/call envelopes, schemas, annotations, dry-run, errors, handoffs, and every Tool with a full example.
 
@@ -123,13 +141,44 @@ Dry-run must use a literal `process.env.<declared-variable> === "1"` guard befor
 - `approval-audit.json` may approve only a passed preflight.
 - `live-verification.json` hashes a real successful input and result. It is not a placeholder.
 - `export-manifest.json` covers every candidate file except itself with SHA-256 and `sanitized: true`.
+- `source-topology.json` proves which roots were authorized, accessible, and searched. Evidence references use stable `sourceId` values and source-relative locators.
+- `canonical-contract.json` records portable business facts, evidence confidence, constraints, the capability graph, and unresolved conflicts.
+- `goal-contract.json` records full and partial goals, information requirements, acquisition options, freshness, and completion predicates.
+- `consumer-requirements.json` states Host facilities needed by each capability and workflow.
+- `host-profile.json` states the actual deployment Host facilities without relying on a brand name.
+- `host-compatibility-report.json` deterministically marks each capability `enabled`, `requires-host-integration`, `disabled`, or `blocked`.
+- `verification-matrix.json` records evidence and status separately for every capability and hard workflow.
 
 Use `scripts/finalize_export.py`; do not hand-author passed audit files.
 
+Package-level summaries must be computed from the capability/workflow matrix. A successful read-only live call cannot approve an uncalled write Tool. An unverified capability may remain honestly usable only at its proven level; it must not inherit `runtime-verified` or `host-verified` from another capability.
+
+## vNext verification-report and live evidence input
+
+`assets/verification-report.schema.json` is the normative vNext `--verification-report` shape. The report `contractId` matches `canonical-contract.json`, and its arrays cover every Canonical Capability and Workflow exactly once. Capability rows contain `behavior`, `runtime`, and `host`; Workflow rows contain `bypass`, `runtime`, and `host`. An unexecuted phase remains present with `not-run`, `requires-review`, or `blocked` and an empty checks array.
+
+Every passed check records the actual command, non-negative exit code, `passed` status, and SHA-256 `evidenceHash` of captured check evidence. A passed Capability or Workflow runtime check additionally records the Canonical `toolName` and the SHA-256 `inputHash` and `resultHash` of the matching live pair. A passed Workflow bypass check sets `zeroExternalWrites: true` and names the applicable Canonical `verificationChecks` through `checkId`. Generic successful commands that are not bound to a Canonical Tool and live input/result cannot establish `runtime-verified`.
+
+Supply `--live-input` and `--live-result` in matching order and repeat the pair as needed. Each vNext entry has `capabilityId` plus `input` or `result`; an input wraps the exact Canonical Tool call, and a result wraps a successful MCP result with contract-valid `structuredContent.data`. A file may contain one entry, an array, or `{ "capabilities": [...] }`. The finalizer hashes the payloads itself and upgrades only the matching Capability. Legacy aggregate reports and one unscoped live pair remain supported only for a single read-only bundle with no Canonical Contract; they cannot approve vNext, multi-Tool, or write packages.
+
 ## Constrained write workflow
 
-When any capability has side effect `create`, `update`, or `delete`, `workflow.json` uses schema version `v1` and kind `constrained-write-subgraph`. It declares a stable `entryCondition`, ordered steps, bindings, enforcement owners, and `unknownOutcomePolicy`.
+For vNext, `canonical-contract.json.workflows[]` is the sole hard-workflow authority and every write maps to exactly one entry. The package includes `portable-workflow-guard.mjs` and executable integration, but omits `workflow.json`; maintaining both would create two workflow truths that can drift. A legacy bundle-only write continues to use `workflow.json` schema version `v1` and kind `constrained-write-subgraph` with its stable `entryCondition`, ordered steps, bindings, enforcement owners, and `unknownOutcomePolicy`.
 
 Each step names exactly one capability or runtime owner, a non-empty list of machine-checkable `requires`, and one of `read_only_bounded`, `not_applicable`, or `never` retry. A `never` step has `maxAttempts: 1`. Bind validation output, request identity, upload grants, and confirmation identity with `equal` or `canonical_equal` constraints.
 
 Enforcement rules use the applicable closed vocabulary: `selection_tokens_same_origin`, `attachment_tokens_from_approved_upload`, `request_equal_to_validated_request`, `confirmation_before_side_effect`, `upload_confirmation_before_transfer`, and `create_at_most_once_no_retry`. Owners are `agent_host`, `mcp_runtime`, `mcp_session_runtime`, `target_api`, or `function:<capability-id>`. Do not invent an alternative prose-only workflow schema.
+
+The workflow protects only non-bypassable safety, transaction, or consistency edges. Optional lookup, progressive questioning, independent partial goals, and ordinary handoffs stay in the Goal Contract and capability graph rather than becoming a rigid transcript.
+
+Every hard edge requires an executable guard and a zero-external-write bypass test. If the declared enforcement owner is unavailable in `host-profile.json`, the protected capability is disabled or marked `requires-host-integration`; prose is not a fallback enforcement mechanism.
+
+For the supplied Node reference guard, import `PortableWorkflowGuard`, create an isolated instance at the deployment's protected session/tenant boundary, and invoke the instance methods `dispatchUploadOnce` or `dispatchOnce`. Do not invent named global dispatch wrappers or share one in-memory grant store across unrelated subjects, sessions, or tenants. A durable/signed replacement may be used only when it preserves the same bindings, atomic single-use consumption, pre-dispatch rejection, and unknown-outcome behavior.
+
+## Migration boundary
+
+- Existing `strict-export-v1` layout and Node/stdio execution remain supported as the `node-stdio` Runtime Profile.
+- A package declares vNext by including `canonical-contract.json` with `schemaVersion: vNext`; it must contain the Portable Core, Host compatibility, and per-capability verification files. Legacy packages continue under their original validator contract.
+- During migration, `capability-bundle.json` may remain the executable view, but its business content must be derived from or checked against the Canonical Contract.
+- A legacy package-level approval may be displayed for compatibility only when computed from all detailed states. It cannot override a weaker capability or workflow state.
+- Future Runtime Profiles reuse the same Portable Core and prove behavior equivalence; they do not fork the business model.
