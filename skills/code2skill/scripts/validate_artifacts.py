@@ -66,6 +66,9 @@ TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]{2,80}$")
 FUNCTION_NAME = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$]{0,80}$")
 FEATURE_SURFACE_KINDS = {"route", "backend-api", "rpc", "message", "worker", "other"}
 AGENT_SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+LEGACY_REVIEWED_NORMALIZER_SHA256 = (
+    "e131b01caeae3f32fe4fabead64652a156c9aa8fbcdf2bdddf01de22611a4e23"
+)
 
 
 class Diagnostics:
@@ -2100,13 +2103,19 @@ def validate_runtime(
             )
         else:
             normalizer_source = normalizer_path.read_text(encoding="utf-8")
-            if (
-                not reference_normalizer.is_file()
-                or normalizer_path.read_bytes() != reference_normalizer.read_bytes()
-            ):
+            candidate_bytes = normalizer_path.read_bytes()
+            current_reviewed = (
+                reference_normalizer.is_file()
+                and candidate_bytes == reference_normalizer.read_bytes()
+            )
+            legacy_reviewed = (
+                hashlib.sha256(candidate_bytes).hexdigest()
+                == LEGACY_REVIEWED_NORMALIZER_SHA256
+            )
+            if not current_reviewed and not legacy_reviewed:
                 diagnostics.error(
                     "portable-error-normalizer.mjs",
-                    "must be the byte-exact reviewed Code2Skill error normalizer",
+                    "must be one of the byte-exact reviewed Code2Skill error normalizer versions",
                 )
         if not re.search(
             r"import\s*\{\s*normalizeToolError\s*\}\s*from\s*['\"]\.\./portable-error-normalizer\.mjs['\"]",

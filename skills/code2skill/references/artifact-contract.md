@@ -1,6 +1,6 @@
 # `node-stdio` strict export artifact contract
 
-Code2Skill defaults to `strict-export-v1`, the current `node-stdio` Runtime Profile: a self-contained candidate package that another MCP Host, reviewer, or evaluator can inspect and execute without reading the source repository. Its Portable Core is language- and Host-independent; Node, Zod and stdio requirements apply to this Runtime Profile, not to every future adapter.
+`strict-export-v1` is Code2Skill's opt-in `node-stdio` audit profile: a self-contained candidate package that another MCP Host, reviewer, or evaluator can inspect and execute without reading the source repository. The normal default is the smaller `core-export-v1` package described in `SKILL.md`; use this document only when the user explicitly requests strict evidence, Host/runtime verification, finalization, or an external evaluator requires it. Its Portable Core is language- and Host-independent; Node, Zod and stdio requirements apply to this strict profile, not to the default core package or every future adapter.
 
 ```text
 generated/code2skill/<feature-id>/

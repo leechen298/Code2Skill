@@ -2,22 +2,20 @@
 
 Code2Skill 是一个可移植的 Agent Skill：让具备代码搜索、理解和测试能力的编程 Agent 从已有前端、后端或全栈代码中提取一个完整业务功能，生成可组合的 Function、MCP Tools 和 Observed Skill。
 
-它不自研代码扫描器或新的 Coding Agent。代码搜索、理解、编辑和测试继续由 Producer 编程 Agent 完成；生成的 Skill 和 Tool 则可能运行在另一个 Consumer Host 中。Code2Skill 固化语义发现、证据规则、能力建模、完整交付契约与验收标准，但不把 Producer 的文件、终端或确认能力带入生成产物。
+它不自研代码扫描器或新的 Coding Agent。代码搜索、理解、编辑和测试继续由 Producer 编程 Agent 完成；生成的 Skill 和 Tool 则可能运行在另一个 Consumer Host 中。Code2Skill 固化能力发现、运行实现和最低稳定性要求，但不把 Producer 的文件、终端或确认能力带入生成产物。
 
-## 核心模型
+## 默认模型
 
 ```text
-获授权的一个或多个源码根目录
-   ↓ Producer 编程 Agent：按语义角色追踪证据
-Portable Core
-   ├── Canonical Contract   唯一业务事实来源
-   ├── Goal Contract        目标、缺失信息与完成条件
-   ├── Capability Graph     可复用能力、handoff 与硬前置条件
-   └── references/feature-context.md / Observed Skill
-   ↓ Runtime Profile
-strict-export-v1 / node-stdio
+获授权的前端/后端代码
+   ↓ Producer 编程 Agent
+精简 core-export-v1
+   ├── Function Core        业务执行
+   ├── MCP Tools            标准调用接口
+   ├── SKILL.md             目标、组合、引导与恢复
+   └── runnable tests       离线行为保障
    ↓ Consumer Host
-渐进引导用户、组合 MCP 与 Skill、执行受保护的业务动作
+安装 Skill、注册 MCP、渐进完成用户目标
 ```
 
 核心原则：
@@ -30,7 +28,9 @@ Tool 数量不由页面、接口、请求或函数数量决定，而由独立业
 
 源码发现同样不依赖某种语言或固定分层。`DTO`、`Request`、`Schema`、函数参数、协议定义或运行时对象都可能承担“数据传输契约”这一语义角色；文件名和框架惯例只是定位线索，不是事实成立条件。
 
-vNext 的完整产品与迁移设计见 [稳定产物架构](skills/code2skill/references/vnext-architecture.md)。
+默认生成不制作完整源码审计档案。需要 Canonical/Goal Contract、Host compatibility、verification matrix、live receipt 或 finalization 时，显式选择兼容的 `strict-export-v1`。严格架构见 [稳定产物架构](skills/code2skill/references/vnext-architecture.md)。
+
+精简包会在 `package.json` 中声明 `code2skill.profile=core-export-v1`，用于防止它被严格审计流水线误当成旧包迁移。Function 同时导出并执行 Zod 输入/输出 Schema，MCP 直接复用这些 Schema，避免“文档有 Schema、运行时却未校验”。
 
 ## 安装
 
@@ -55,12 +55,13 @@ npx skills add . --skill code2skill -a "$AGENT_ID" -g -y
 在目标代码仓库中调用。若前端、后端、接口契约或测试位于不同仓库，请把所有允许搜索的源码根目录一并提供；Code2Skill 不会扫描整台机器猜测后端位置：
 
 ```text
-使用 $code2skill，把 /knowledge 的客户端功能生成完整 strict-export-v1。
+使用 $code2skill，把 /knowledge 的客户端功能生成为默认精简能力包。
 允许搜索的源码根目录：当前前端仓库、../service、../contracts。
-请沿前后端真实调用链实现 MCP Tools、Observed Skill，并完成协议与运行时验证。
+请以前端实际调用接口为能力面，实现 Function、MCP、Skill 和离线测试；
+后端只用于补齐公开 Request/Response，真实接口验证保持关闭。
 ```
 
-目标单位是一个可验证的业务 feature，不要求一定存在前端页面。对于 API、RPC、消息消费者、定时任务或后端编排等 feature，`export-profile.json.featureSurface` 记录真实表面类型和稳定标识。vNext 不生成 `PAGE.md`，也不使用 `pageRoute`；业务背景统一写入 `references/feature-context.md`。旧包中的 `PAGE.md/pageRoute` 只是遗留兼容格式，不是 vNext 主产物。
+目标单位是一个可验证的业务 feature，不要求一定存在前端页面。API、RPC、消息消费者、定时任务或后端编排同样可以生成；默认不生成 `PAGE.md`，复杂业务背景才写入可选的 `references/feature-context.md`。
 
 也可以用于纠正已有页面级大 Tool：
 
@@ -73,54 +74,42 @@ npx skills add . --skill code2skill -a "$AGENT_ID" -g -y
 
 ```text
 generated/code2skill/<feature-id>/
-├── export-profile.json
-├── source-topology.json
-├── canonical-contract.json
-├── goal-contract.json
-├── consumer-requirements.json
-├── host-profile.json
-├── host-compatibility-report.json
-├── verification-matrix.json
-├── capability-bundle.json
-├── capability-draft.json
 ├── SKILL.md
-├── MCP.zh-CN.md
 ├── MCP-SETUP.md
-├── references/
-│   ├── feature-context.md
-│   └── capability-contracts.json # Canonical 派生的文档事实与证据索引
+├── package.json
 ├── function-core/
-│   ├── index.mjs            # 自包含命名 Function 实现
-│   ├── capability-bundle.json
-│   └── schema-contract.json # Canonical 派生的 Function 输入/输出与条件规则
+│   └── index.mjs
 ├── mcp-tool/
-│   ├── index.mjs            # 可读的逐 Tool MCP adapter
-│   ├── runtime.mjs          # 自包含 MCP SDK runtime
-│   └── schema-contract.json # 与 Function 完全相同的 MCP Schema 契约
-├── portable-workflow-guard.mjs # 仅存在不可绕过的硬约束时需要
-├── portable-error-normalizer.mjs # 结构化错误与未知结果的审阅实现
-├── workflow.json              # 仅旧版兼容包使用；vNext 禁止双重真相
-├── preflight-report.json
-├── approval-audit.json
-├── live-verification.json
-└── export-manifest.json
+│   └── index.mjs
+├── portable-error-normalizer.mjs
+├── tests/
+│   └── *.test.mjs
+└── references/
+    └── feature-context.md   # 仅在复杂业务确有必要时生成
 ```
 
-这不是三份说明文档：包内必须有独立命名 Function、可执行 MCP Server、逐 Tool 中文契约、真实检查记录和全文件完整性清单。当前 `strict-export-v1` 明确采用 `node-stdio` Runtime Profile；它是默认实现，不是 Portable Core 的唯一实现。
+默认包不携带重复 Contract、证据目录、Host 报告、MCP 长文档、验证矩阵、收据和 manifest。Function、MCP、Skill 与可运行测试是主要产物；MCP 通过 `package.json` 使用官方 SDK 和 Zod，不再默认内嵌庞大的 SDK bundle。
+
+精简包使用以下离线校验：
+
+```bash
+cd generated/code2skill/<feature-id> && npm install
+cd -
+python3 skills/code2skill/scripts/validate_core_export.py \
+  generated/code2skill/<feature-id>
+```
+
+校验关注运行内容：命名 Function、实际执行的 Zod 输入/输出 Schema、逐 Tool 适配、结构化结果、dry-run、错误规范化、安装边界和可运行测试。默认会执行 `node --check`，再以清理业务凭证后的固定 `node --test` 命令逐个运行包内测试，不执行候选声明的 npm lifecycle；它不提供网络隔离，因此测试必须 mock 外部请求且不得调用真实业务接口。它不生成或验证审计证明。
 
 生成 Skill 不是死板的页面操作脚本。它应先识别用户目标，复用已经取得且仍有效的信息，只补问或查询当前缺失项；用户只要部分结果时可以提前停止，信息已经齐全时也不应重复调用。派生值和动态值只能由明确能力或可信运行环境提供，不能为了省一次调用而让用户自报。Agent 可以临时组合契约兼容的 MCP Tool 和 Skill；源码中未出现的新组合会标记为 `derived composition`，写入组合仍受运行时硬约束保护。
 
-Canonical Contract 中可执行的副作用、请求绑定、输出/成功条件、条件规则和动态策略，都必须引用属于该操作且语义匹配的事实证据，不能靠“接口存在”或借用另一条操作的证据补齐。Goal 的每项信息也有 Schema 和 `supplies` 映射，明确它最终进入哪个 Capability 输入；条件依赖必须可解析且无环。当前新取得的信息用 `acquiredNow` 标记，复用缓存信息则逐项满足 `reuseWhile` 并提交 `reuseProof`，不能只声称 `fresh: true`。
+默认只建模前端消费、下游 handoff 和最小成功判断需要的输出；普通业务校验由目标 API 负责。不要为了审计完整性追踪与公开请求无关的下游实现，也不要从一次响应样本冻结动态值或 nullable 类型。
 
 输入输出类型以前端真实适配后的 API 边界和可执行传输契约为准，后端类型、序列化器与测试用于补充可空性等信息；单次运行样本只做验证，不能把一次 `null` 收窄成永久的 null-only 类型。vNext 区分“字段可缺省”和“值可为 null”，输出 Schema 支持一个真实类型加 `null` 的标准 nullable 联合类型。
 
-普通业务校验以真实后端 API 为权威边界，Function/MCP 不需要重写一份容易漂移的后端规则。运行时应保留可机器区分的业务、权限、上游、网络和未知结果错误，使 Agent 能解释、补充信息或安全地重试。只有身份绑定、可信确认、附件来源、防重和未知写入结果等确实不能绕过的约束，才生成确定性 Guard；此时 `hardWorkflowEvidence` 必须分别证明受保护值的产生、最终请求绑定和派发前强制检查。仅有页面确认框和普通 POST 时保持后端权威写能力，不虚构 Host Guard。每条硬 Workflow 通过 Canonical `capabilityIds` 明确列出全部成员，Host 验证不能只检查入口能力。
+普通业务校验以真实后端 API 为权威边界，Function/MCP 不重写整套后端规则。运行时保留可机器区分的业务、权限、网络、响应格式和未知写入结果错误。只有源码明确证明不可绕过的安全边界时才生成确定性 Guard；页面确认框和普通 POST 不足以证明自定义 Host Guard。
 
-当客户端正常通过上游 Tool 取得某个值、但目标接口是否允许省略仍未证明时，Canonical 用 `targetRequiredness: unproven` 明确保留这项疑问。公开 Schema 继续保持可选，生成 Skill 必须推荐正常 provider 并说明最终由目标 API 决定；验证矩阵会列出问题并要求受控缺省测试，但不会凭页面顺序把它升级为必填或 Host Guard。源码已明确允许省略时则标为 `proven-optional`。
-
-当源码证明业务需要附件时，Code2Skill 生成业务上传、返回结果和下游绑定所需的 Function、MCP、Skill 说明和测试。上传结果必须通过同一个 Canonical Contract 同步绑定到下游输入、handoff、能力图和真实请求，不能退化为用户自报的 URL 或 token；STS/预签名凭证只是内部步骤，不是已完成的业务上传能力。附件的接收与提供属于 Consumer Host；Code2Skill 不实现聊天接入、文件下载或特定平台适配。不透明 Host 授权引用不能直接当作文件上传，生成实现必须经通用 `attachment-resolution` 边界取得受控内容或流；Canonical `attachments.contentBindings` 还必须逐项对应 `implementation.outputStepId` 中真实的 body/multipart 上传字段，并引用共同的事实级请求构造、序列化或传输契约证据。
-
-当前可移植的不透明授权边界一次 Tool 调用处理一个附件；多个附件重复调用上传 Tool，再把各次返回的业务上传结果组合到下游请求。这样每个授权、元数据、确认和未知结果都能独立绑定与验证。
+附件接收属于 Consumer Host；Code2Skill 只生成源码证明的业务上传与下游绑定。如果只能取得 STS/预签名凭证而无法完成上传，应明确说明目标未闭环，不能接受用户自报 URL 或任意本地文件路径来伪装完成。
 
 ## 安装生成产物
 
@@ -130,9 +119,36 @@ Canonical Contract 中可执行的副作用、请求绑定、输出/成功条件
 npx skills add ./generated/code2skill/<feature-id> -a "$AGENT_ID" -g -y
 ```
 
-这个命令只安装 Skill 知识层，不会启动或注册 MCP，也不会注入认证信息。每个 vNext 包都必须在 `MCP-SETUP.md` 单独说明 MCP 启动命令、Host 注册所需的 command/args、环境变量、认证注入与连通验证。“Skill 已安装”、“MCP 已连通”和“真实业务已验证”是三个独立状态。
+这个命令只安装 Skill 知识层，不会安装依赖、启动或注册 MCP，也不会注入认证信息。每个生成包都在 `MCP-SETUP.md` 单独说明 `npm install`、MCP 启动、Host 注册和认证环境变量。“Skill 已安装”、“MCP 已连通”和“真实业务已验证”是三个独立状态。
 
-## 校验与收口
+## 可选 strict-export-v1
+
+只有用户明确要求完整证据链、Canonical/Goal Contract、Host compatibility、逐能力验证、live receipt、finalization、manifest、外部 evaluator 或合规审计时，才启用 `strict-export-v1`。不要从“稳定”“可用”自动推断严格审计。
+
+严格模式保留现有完整产物、校验器和分阶段流水线，旧包继续兼容；它不再是默认交付。
+
+### Strict Producer 流水线
+
+严格模式拆成五个显式阶段，由 `skills/code2skill/scripts/run_pipeline.py` 驱动：`analyze`（源码范围、证据解析与 Canonical Contract 校验）→ `generate`（`compile_artifacts.py` 从 Canonical Contract 确定性编译 Function 核心与 MCP adapter，再派生全部视图并刷新文档 SHA 标记；Tool 标题/描述来自 Agent 编写的 `authoring/tool-docs.json`，绝不编造文案，不可推导项报精确原因）→ `verify`（仅离线行为验证）→ `runtime-verify`（显式 opt-in 的真实环境验证，默认关闭）→ `finalize`（证据门控收口与最终报告）。
+
+```bash
+python3 skills/code2skill/scripts/run_pipeline.py init \
+  generated/code2skill/<feature-id> \
+  --source-map client=/authorized/client-root \
+  --source-map service=/authorized/service-root
+python3 skills/code2skill/scripts/run_pipeline.py run generated/code2skill/<feature-id>
+python3 skills/code2skill/scripts/run_pipeline.py status generated/code2skill/<feature-id>
+python3 skills/code2skill/scripts/run_pipeline.py diagnose generated/code2skill/<feature-id>
+```
+
+- 默认流程只完成 `generated + behavior-verified`，且只运行本仓库维护的固定验证步骤：`validate_artifacts.py --pre-finalize` 静态校验、`probe_mcp.py --offline` 协议测试（initialize/tools-list/协议错误/dry-run，使用脱敏无凭证环境，但它不是网络隔离证明）、`run_vectors.py` 从 Canonical Contract 确定性派生的 Function/Goal/mock-dispatcher 向量。流水线不执行候选方声明的任意命令；本轮无法机械证明的检查（动态值、附件、组合、条件谓词）保留 `requires-review`，不用脚本硬凑。真实读取必须用 `--enable-runtime-verify` 显式开启，由仓库固定 live 调用器执行真实 `tools/call`；业务入参绝不编造——每次调用使用 `verification/cases/live/<capabilityId>.json` 中调用方已脱敏的显式用例（零入参 Tool 才有机械空用例，缺失即 `not-run`）。真实写入还要在同一行命令上逐项 `--authorize-write <capabilityId>`。启用和授权只对本次调用生效，绝不写入状态；一旦输入变化，旧 live 证据及其结论会在 finalize 之前作废。
+- `init` 先判定 `fresh`、`migrate` 或 `changed-only` 并输出迁移/变更摘要；`migrate` 必须先审阅摘要并用 `--acknowledge-migration` 确认后才允许 `run`，旧产物不会被静默删除或覆盖。
+- 运行状态保存在候选包之外的 `<feature-id>.producer-state/` sidecar；各阶段按输入指纹内容寻址，输入未变化的已完成阶段不会重跑，上游变化只失效受影响的下游阶段，中断后可安全续跑。上游阶段失败时，所有下游已完成阶段会被标记为 `invalidated`（陈旧证明），报告不再沿用旧结论；`--only` 只允许跳过“所选阶段上游且已完成且指纹当前”的阶段。finalize 会保存自身输出 Hash，receipt/manifest 被删除或篡改后必定重跑。
+- 向量证据、日志、live 证据对和报告都持久化在 `<state>/verification/`；顺序固定为执行 → 持久化 → 计算 Hash → 生成报告 → finalize；Hash 之后修改证据会被 finalize 拒绝，证据路径经符号链接解析后也必须留在 verification 目录内；报告、preflight、receipt 和 manifest 不引用 `/tmp` 等临时文件；证据守卫按 capability/workflow 精确匹配。Host 验证本轮不进入流水线，仍作为 verification matrix 中的独立状态报告。
+- `diagnose` 按根因/阶段聚合错误（source/topology、canonical、capability、function/mcp、documentation、verification、finalization），优先输出阻断派生的根因并汇总被抑制的下游错误（`--full` 查看全部）；`status` 与最终报告分别列出 `generated`、`behavior-verified`、`runtime-verified`、`host-verified`、`deployed`，以及每个阶段的耗时、跳过依据、失败原因和下一步。
+- 耗时基准：`python3 tests/benchmark_pipeline.py` 测量同一合成候选的首次、增量（一个契约字段变化）与无变化三种运行，输出各阶段耗时与跳过明细。基准只覆盖确定性流水线（契约→编译→验证→收口秒级完成）；Agent 的源码阅读与契约编写时间恰是被避免重复的部分，增量与无变化运行中 Agent 触碰文件数与重读源码数均为 0。
+
+### Strict 校验与收口
 
 生成阶段：
 

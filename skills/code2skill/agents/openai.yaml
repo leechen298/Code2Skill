@@ -1,4 +1,4 @@
 interface:
   display_name: "Code2Skill"
-  short_description: "将现有代码编译为可组合的 MCP Tools 与 Skills"
-  default_prompt: "Use $code2skill to convert an existing application feature into evidence-backed MCP tools and an observed Agent Skill."
+  short_description: "将现有代码生成精简可运行的 Function、MCP 与 Skill"
+  default_prompt: "Use $code2skill to convert one application feature into the default compact core-export-v1 Function, MCP, and Agent Skill package. Do not enable strict audit mode unless I explicitly request it."

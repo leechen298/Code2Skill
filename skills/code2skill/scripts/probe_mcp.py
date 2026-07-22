@@ -92,12 +92,35 @@ class StdioMcpClient:
                 return message
 
 
-def spawn_server(root: Path, timeout: float, *, dry_run: bool) -> tuple[subprocess.Popen[str], StdioMcpClient]:
+def offline_environment(profile: dict[str, Any]) -> dict[str, str]:
+    """Build the scrubbed environment for offline probe sessions.
+
+    Offline sessions must not inherit host credentials, proxies, or other
+    business configuration, and the declared dry-run variable is always set so
+    every handler path stays behind its dry-run boundary. This is protocol-test
+    hygiene only: it is not a sandbox and proves nothing about what candidate
+    code could do with network, files, or processes.
+    """
+    variable = profile.get("dryRunEnvironmentVariable")
+    if not isinstance(variable, str) or not variable:
+        raise ProbeError("offline probe requires dryRunEnvironmentVariable")
+    allowed = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "SYSTEMROOT")
+    environment = {
+        name: os.environ[name] for name in allowed if name in os.environ
+    }
+    environment[variable] = "1"
+    return environment
+
+
+def spawn_server(root: Path, timeout: float, *, dry_run: bool, offline: bool = False) -> tuple[subprocess.Popen[str], StdioMcpClient]:
     profile = read_json(root / "export-profile.json")
     if not isinstance(profile, dict):
         raise ProbeError("export-profile.json must be an object")
-    environment = os.environ.copy()
-    if dry_run:
+    if offline:
+        environment = offline_environment(profile)
+    else:
+        environment = os.environ.copy()
+    if dry_run and not offline:
         variable = profile.get("dryRunEnvironmentVariable")
         if not isinstance(variable, str) or not variable:
             raise ProbeError("dry-run case requires dryRunEnvironmentVariable")
@@ -425,8 +448,9 @@ def run_session(
     *,
     dry_run: bool,
     check_protocol_errors: bool,
+    offline: bool = False,
 ) -> tuple[int, int, int]:
-    process, client = spawn_server(root, timeout, dry_run=dry_run)
+    process, client = spawn_server(root, timeout, dry_run=dry_run, offline=offline)
     completed = 0
     invalid_arguments_checked = 0
     execution_errors_checked = 0
@@ -527,6 +551,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--call", type=Path, action="append", default=[], help="JSON Tool call case; repeat as needed")
     parser.add_argument("--error-call", type=Path, action="append", default=[], help="JSON Tool call case that must reach a structured Tool execution error")
     parser.add_argument("--dry-run-call", type=Path, action="append", default=[], help="JSON Tool call case executed with the declared dry-run variable")
+    parser.add_argument("--offline", action="store_true", help="run only offline protocol checks (initialize, tools/list, protocol errors, dry-run); successful business calls are recorded as not run")
     parser.add_argument("--timeout", type=float, default=10.0)
     return parser.parse_args()
 
@@ -573,17 +598,22 @@ def main() -> int:
                     + "; ".join(errors)
                 )
     normal_cases = load_cases(args.call)
+    error_cases = load_cases(args.error_call)
+    if args.offline and (normal_cases or error_cases):
+        raise ProbeError(
+            "--offline must not execute successful or execution-error business calls; "
+            "remove --call/--error-call or drop --offline"
+        )
     validate_cases(normal_cases, "--call")
     normal_names = {item["name"] for item in normal_cases}
     missing_normal = sorted(set(expected_tools) - normal_names)
-    if missing_normal:
+    if missing_normal and not args.offline:
         raise ProbeError(
             f"--call must include a successful case for every Tool; missing {missing_normal}"
         )
-    error_cases = load_cases(args.error_call)
     validate_cases(error_cases, "--error-call")
     missing_errors = sorted(set(expected_tools) - {item["name"] for item in error_cases})
-    if missing_errors:
+    if missing_errors and not args.offline:
         raise ProbeError(
             f"--error-call must include a structured execution-error case for every Tool; missing {missing_errors}"
         )
@@ -612,6 +642,7 @@ def main() -> int:
             args.timeout,
             dry_run=False,
             check_protocol_errors=True,
+            offline=args.offline,
         )
         dry_count = 0
         if dry_cases:
@@ -624,16 +655,26 @@ def main() -> int:
                 args.timeout,
                 dry_run=True,
                 check_protocol_errors=False,
+                offline=args.offline,
             )
 
     print(json.dumps({
         "protocolVersion": PROTOCOL_VERSION,
         "detachedCopy": True,
+        "offline": bool(args.offline),
         "tools": sorted(expected_tools),
         "successfulCalls": normal_count,
         "successfulDryRunCalls": dry_count,
         "invalidArgumentsChecked": invalid_arguments_checked,
         "structuredExecutionErrorsChecked": execution_errors_checked,
+        **(
+            {
+                "businessCallsNotRun": sorted(expected_tools),
+                "runtimeVerificationRequired": True,
+            }
+            if args.offline
+            else {}
+        ),
     }, ensure_ascii=False, sort_keys=True))
     return 0
 

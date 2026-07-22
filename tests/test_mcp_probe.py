@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -258,6 +259,88 @@ class DetachedMcpProbeTest(unittest.TestCase):
         self.assertEqual(summary["successfulDryRunCalls"], 1)
         self.assertEqual(summary["invalidArgumentsChecked"], 1)
         self.assertEqual(summary["structuredExecutionErrorsChecked"], 1)
+
+    def test_probe_offline_mode_scrubs_environment_and_forces_dry_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = create_candidate(root)
+            server = candidate / "mcp-tool" / "index.mjs"
+            # The server answers initialize with the correct protocol version
+            # only when the environment is scrubbed AND the dry-run variable
+            # is set; any leaked credential/proxy/HOME flips the version.
+            server.write_text(
+                server.read_text(encoding="utf-8").replace(
+                    "if (message.method === 'initialize') {",
+                    "const __envLeaked = ('SYNTHETIC_SECRET' in process.env) "
+                    "|| ('HTTP_PROXY' in process.env) || ('HOME' in process.env) "
+                    "|| process.env.SYNTHETIC_DRY_RUN !== '1';\n"
+                    "if (message.method === 'initialize') {",
+                ).replace(
+                    "protocolVersion: '2025-11-25'",
+                    "protocolVersion: __envLeaked ? '1999-01-01' : '2025-11-25'",
+                ),
+                encoding="utf-8",
+            )
+            environment = dict(os.environ)
+            environment["SYNTHETIC_SECRET"] = "s3cr3t"
+            environment["HTTP_PROXY"] = "http://proxy.example:8080"
+            offline = subprocess.run(
+                [sys.executable, str(PROBE), str(candidate), "--offline"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                env=environment,
+            )
+            self.assertEqual(offline.returncode, 0, offline.stderr)
+            summary = json.loads(offline.stdout)
+            self.assertIs(summary["offline"], True)
+            self.assertIs(summary["runtimeVerificationRequired"], True)
+            self.assertEqual(summary["successfulCalls"], 0)
+            self.assertEqual(summary["businessCallsNotRun"], ["echo_value"])
+            # A non-offline probe still receives the host environment, which
+            # flips the version and fails initialize.
+            call = root / "call.json"
+            dry_call = root / "dry-call.json"
+            write_json(call, {"name": "echo_value", "arguments": {"value": "normal"}})
+            write_json(dry_call, {"name": "echo_value", "arguments": {"value": "dry"}})
+            error_call = root / "error-call.json"
+            write_json(error_call, {"name": "echo_value", "arguments": {"value": "__error__"}})
+            online = subprocess.run(
+                [
+                    sys.executable,
+                    str(PROBE),
+                    str(candidate),
+                    "--call",
+                    str(call),
+                    "--error-call",
+                    str(error_call),
+                    "--dry-run-call",
+                    str(dry_call),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                env=environment,
+            )
+            self.assertNotEqual(online.returncode, 0)
+
+    def test_probe_offline_rejects_business_call_cases(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = create_candidate(root)
+            call = root / "call.json"
+            write_json(call, {"name": "echo_value", "arguments": {"value": "normal"}})
+            result = subprocess.run(
+                [sys.executable, str(PROBE), str(candidate), "--offline", "--call", str(call)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("--offline must not execute", result.stderr)
 
     def test_probe_rejects_success_without_text_content(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

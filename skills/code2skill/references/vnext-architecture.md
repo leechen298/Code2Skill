@@ -46,7 +46,7 @@ Portable Core 不包含 Node、Python、stdio、某个 MCP SDK 或某个 Agent H
 
 Runtime Profile 负责把 Portable Core 变成可执行实现。一个 Profile 可以指定语言、SDK、传输、打包方式和静态检查面，但不能反过来改变业务契约。
 
-现有 `strict-export-v1` 在 vNext 中明确为 **`node-stdio` Runtime Profile**：自包含 Node Function core、官方 MCP SDK、Zod、stdio transport、逐 Tool 字面注册和可复制运行包。它仍是默认且受支持的交付路径，但不再代表 Portable Core 的唯一实现。
+现有 `strict-export-v1` 在 vNext 中明确为 **`node-stdio` 严格审计 Profile**：自包含 Node Function core、官方 MCP SDK、Zod、stdio transport、逐 Tool 字面注册和可复制运行包。它继续受支持，但只在用户明确要求完整证据、Host/运行时验证或 finalization 时启用；普通生成默认使用 `core-export-v1` 精简运行包。
 
 vNext 不再保留页面形状的主产物。业务背景统一写入 `references/feature-context.md`，`export-profile.json.featureSurface` 记录真实类型和稳定标识，不生成 `PAGE.md`，也不使用 `pageRoute`。旧版包可继续被兼容读取，但不得将这两个遗留字段重新引入 vNext 契约。
 

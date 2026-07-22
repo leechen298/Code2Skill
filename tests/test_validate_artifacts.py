@@ -832,6 +832,36 @@ class StrictExportValidatorTest(unittest.TestCase):
                 diagnostics.errors,
             )
 
+    def test_vnext_runtime_keeps_legacy_reviewed_normalizer_compatible(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = create_base(Path(directory))
+            normalizer = candidate / "portable-error-normalizer.mjs"
+            current = normalizer.read_text(encoding="utf-8")
+            legacy = re.sub(
+                r"\nexport function toMcpResult\(value, isError = false\) \{.*?\n\}\n\n",
+                "\n",
+                current,
+                count=1,
+                flags=re.DOTALL,
+            )
+            self.assertEqual(
+                hashlib.sha256(legacy.encode("utf-8")).hexdigest(),
+                validator_module.LEGACY_REVIEWED_NORMALIZER_SHA256,
+            )
+            normalizer.write_text(legacy, encoding="utf-8")
+            diagnostics = validator_module.Diagnostics()
+            validator_module.validate_runtime(
+                candidate,
+                vnext_capabilities(candidate),
+                "CODE2SKILL_DRY_RUN",
+                diagnostics,
+                vnext=True,
+            )
+            self.assertFalse(
+                any("byte-exact reviewed" in item for item in diagnostics.errors),
+                diagnostics.errors,
+            )
+
     def test_vnext_callback_requires_strict_structured_error_projection(self) -> None:
         mutations = (
             (

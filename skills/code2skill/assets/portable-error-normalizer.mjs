@@ -22,6 +22,17 @@ function plainJson(value, seen = new Set()) {
   return String(value);
 }
 
+export function toMcpResult(value, isError = false) {
+  const structuredContent = plainJson(value);
+  return Object.freeze({
+    structuredContent,
+    content: Object.freeze([
+      Object.freeze({ type: "text", text: JSON.stringify(structuredContent) }),
+    ]),
+    isError,
+  });
+}
+
 export function normalizeToolError(error, operationPolicy = {}) {
   const source = error && typeof error === "object" ? error : {};
   const hasStructuredCode = typeof source.code === "string" && source.code.trim() !== "";

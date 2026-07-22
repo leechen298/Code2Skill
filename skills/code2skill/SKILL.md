@@ -1,256 +1,174 @@
 ---
 name: code2skill
-description: Convert an existing frontend, backend, or full-stack application feature into evidence-backed Feature Context, composable MCP Tools, and an observed Agent Skill. Use when extracting agent capabilities from routes, pages, components, API clients, controllers, services, schemas, tests, or existing workflows; when replacing a page-level mega-tool with reusable business capabilities; or when auditing and regenerating code-derived MCP and Skill artifacts.
+description: 从已有前端、后端或全栈代码中提取一个业务功能，生成精简、可运行、可安装的 Function、MCP 和 Agent Skill；适用于页面功能、接口功能、业务流程及已有生成包的修正。
 ---
 
 # Code2Skill
 
-Turn capabilities trapped in application code into reusable Agent capabilities. Use the coding Agent as the Producer that searches authorized source roots and implements the export; do not build a parallel scanner or autonomous Agent unless repeated evidence shows one is needed. Treat the Agent Host that later consumes the generated Skill and Tools as a separate system with separately declared capabilities.
+把已有应用中的业务能力转换成其他 Agent 可以使用的 Function、MCP Tools 和 Skill。默认目标是生成一份小而可靠的运行包，不是为源码制作审计档案。
 
-## Core contract
+使用当前编程 Agent 搜索、理解和修改用户授权的代码；不要另建扫描器或自治 Agent。生成包的 Consumer 可能不是当前编程 Agent，因此不得假设它能读取原仓库、任意本地文件或 Producer 的会话状态。
 
-Model four connected delivery surfaces and compile them into a complete strict export:
+## 默认交付：core-export-v1
 
-1. **Feature Context** explains the business purpose, concepts, field semantics, states, permissions, rules, failures, and original client behavior.
-2. **Function Core** implements one self-contained named business function per public capability.
-3. **MCP Tools** expose those independently valuable, composable execution capabilities with stable protocol contracts.
-4. **Observed Skill** captures the existing product's usage knowledge, conditional composition paths, and recovery guidance without forcing irrelevant calls.
+除非用户明确要求严格审计，默认只生成：
 
-The portable business contract is independent from its execution adapter. The current default delivery profile, `strict-export-v1`, is the `node-stdio` Runtime Profile: a self-contained capability bundle, named Node Function core, stdio MCP Server, Chinese Feature Context/MCP/Skill documentation, MCP setup guidance, evidence draft, deterministic verification, live receipt, approval audit, and integrity manifest. It remains fully supported, but it is not the only possible implementation of the Portable Core. A documentation-only design note is not a completed Code2Skill output.
-
-Apply this invariant:
-
-> MCP Tools provide composable execution capabilities. Skills provide domain knowledge, selection strategy, and default flows. The Agent chooses the composition for the user's goal. Schemas, handlers, servers, or deterministic workflows enforce constraints that must never be skipped.
-
-Read [vnext-architecture.md](references/vnext-architecture.md) first for Producer/Consumer boundaries, Portable Core, progressive goal completion, portability, and the migration contract. Then read [capability-model.md](references/capability-model.md) before deciding capability boundaries. Read every other reference named by the relevant workflow step; do not ask another agent to interpret these instructions.
-
-## Workflow
-
-### 1. Establish scope and repository rules
-
-- Read repository instructions and inspect the worktree before editing.
-- Confirm the requested feature through the user's goal, route, screen, API, symbol, or test. If the target is discoverable from the repository, proceed without asking.
-- Define every user-authorized source root and the output directory. Default the self-contained candidate to `generated/code2skill/<feature-id>/`. Search only those roots; do not scan the user's machine to guess where a backend might exist.
-- Create `source-topology.json` with a stable `sourceId`, evidence role, accessibility, and search summary for each frontend, backend, contract, test, or other authorized root. These roles describe evidence, not required directory or architecture names. Record unavailable roots and missing semantic roles explicitly.
-- Read any evaluator or delivery contract supplied by the target repository. Put the source-proven feature surface, route or stable surface identifier, origin allowlist, dry-run environment variable, protocol, transport, and language in `export-profile.json`; never guess or hard-code another project's constants into this Skill. vNext records the real surface in `featureSurface` and does not use `pageRoute`. A legacy package may still contain `PAGE.md/pageRoute`, but never introduce them as vNext authoring inputs or primary artifacts.
-- Preserve unrelated changes. Repository-native MCP code may coexist, but the strict export still needs its own executable Function core and MCP entry point.
-
-### 2. Trace the feature end to end
-
-Read [evidence-and-discovery.md](references/evidence-and-discovery.md).
-
-- Trace client entry points, routes or other feature surfaces, components, state, validation, visibility conditions, requests, result rendering, and error handling.
-- For a client feature, establish the candidate Function/MCP surface from the backend APIs the client actually invokes. One client API does not mechanically equal one Tool, but a backend-only internal method is not a candidate merely because it is discoverable. Include a backend capability outside that client-observed API surface only when the user explicitly expands the feature scope or another authorized entry surface proves it belongs.
-- When available, continue through transfer contracts, authorization, application orchestration, business rules, external calls, persistence, and tests. Use that evidence to confirm or qualify the client-observed request/response contract, dynamic values, conditional fields, permissions, side effects, idempotency, and failures. Discover semantic roles from call paths, registrations, validation, serialization, field use, protocols, and assertions. Names such as DTO, Controller, Service, Request, Schema, or Model are optional clues, never required architecture.
-- Build `canonical-contract.json` before authoring executable artifacts. It is the language- and Host-independent source of truth for every capability: exact public input shape, nested-object boundary, defaults, output provenance (`static`, `dynamic`, or `unconstrained`), unconditional/conditional/forbidden inputs, cross-field predicates, provenance and freshness, request boundary, accepted statuses, response names, business failures, minimum usable result, side effects, confirmation, retry, and evidence confidence. Every top-level output declares a value domain; a nested output may inherit one from a declared parent. Static domains contain exactly source-proven values and evidence, dynamic domains explicitly declare identity/tenant/session booleans plus freshness, and unconstrained domains contain only their kind. Resolve material rows from executable code, protocols, validation, or tests; do not replace source names with clearer synonyms.
-- Preserve contradictions between sources and select an authority only when evidence supports it. The target API is authoritative for ordinary business acceptance and may reject a structurally valid request with a recoverable business error. Do not duplicate every server rule as Function validation or a hard Workflow. Missing proof about authorization, material side effects, idempotency, confirmation, or unknown-outcome handling keeps the affected write capability out of `ready`; missing proof of an ordinary business rule remains an explicit unknown and is handled through the API's structured error path.
-- Run the target repository's relevant tests and inspect their assertions. A TypeScript type or UI control alone does not prove runtime serialization, response validation, or cross-field rules.
-- Resolve the public runtime origin from the target repository's actual startup contract, environment configuration, or executable test setup. The origin used by generated Functions must match `allowedRuntimeOrigins`; never replace a proven target origin with a convenient placeholder.
-- Record each material conclusion in `canonical-contract.json.evidenceCatalog` with `evidenceId`, `sourceId`, portable `locator`, `semanticRole`, and `assertionLevel` (`fact`, `inference`, or `unknown`). Reuse those `evidenceId` values in Feature Context and contract facts instead of inventing a parallel path-only evidence format.
-- Bind fact evidence to the exact operation and contract field it proves. The declared side effect, each HTTP step/request binding, every output and success rule, every conditional rule, and every dynamic scope/freshness or reuse policy must cite fact-level evidence with the matching semantic role. A generic entry/API-existence fact, a label, an inference, or evidence borrowed from another operation cannot prove executable request, response, condition, or side-effect semantics. For writes, `evidenceCoverage` is the closed set `sideEffect/backendContract/authorization/validation/idempotency/unknownOutcome`; reads carry only `sideEffect` coverage.
-- Treat the client feature as an evidence boundary, not automatically as one capability or one Tool.
-
-### 3. Model context and capabilities before coding
-
-- Write a short Feature Context using [feature-context.md](assets/feature-context.md) as a starting point.
-- Model goals inside `canonical-contract.json` around user outcomes rather than the original screen transcript. Classify information as always required, conditionally required, optional, derived, or dynamic; declare where it can come from, when it expires, when it must be refreshed, and the completion predicate for each goal. `derived` and `dynamic` Goal information must come from an exact Capability output or a declared trusted Host requirement, never from user self-report or an unimplemented local derivation. The derivation step projects this into `goal-contract.json`.
-- Give every Goal information need a portable type and a complete closed Schema for object/array values. Map it through `supplies[]` to exact `{capabilityId, inputName, mappingKind}` targets; each target input has exactly one mapping across the Goal. Schema/cardinality, acquisition source, mapping kind, and the target input's source strategy must agree. One need that supplies several inputs needs at least one acquisition source compatible with all of them; trusted Host requirement IDs match exactly, and an upstream-only opaque value cannot be replaced by user input. Optional information cannot supply an unconditionally required Capability input. Every required or conditionally required input of a Capability participating in the Goal must be covered.
-- Make `requiredWhen` activation executable: every path resolves against the declared information Schema, cannot depend on optional information or itself, and its condition must exactly match the supplied Capability input's `requiredWhen`. The complete acquisition-provider, supplies, and activation graph must be acyclic. Object-form conditional Capability declarations reuse the same condition as their linked need, and an explicit `conditionalNeedsOnlyWhenActive` value is always `true`. An unresolved activation keeps the Goal pending. `reuseWhile` uses only evidenced true-valued claims; generated Goal-state tests mark current acquisition with `{__goalState: true, value, acquiredNow: true}` and cached values with claim-complete `reuseProof`. Do not accept `fresh: true` as a shortcut, and reject values that fail the need Schema.
-- Draft candidate capabilities around independent user or Agent goals.
-- Merge or split candidates by business meaning, independent value, contract stability, reuse, side effects, and enforceable preconditions.
-- Do not derive Tool count from page count, request count, endpoint count, or function count.
-- Decide whether lookup data belongs in an input enum, Skill reference, MCP Resource, or MCP Tool. Do not mechanically turn every option list into a Tool.
-- Treat client-visible local options or structured field metadata as independent capabilities when a user can ask for them directly, when several downstream calls need them, or when their labels/semantics matter beyond validation. In those cases, prefer a Tool (or a Resource when execution is unnecessary) even if the current implementation is a constant.
-- Apply that test to each catalog independently. Do not merge unrelated local catalogs into a generic page-options Tool merely because they share one configuration file, render on one page, or both execute without HTTP. If each catalog can satisfy a different partial user goal or feeds a different downstream input chain, each is a separate capability.
-- Stop and report a boundary if only client code exists and a write operation's authorization, financial effect, idempotency, or compensation behavior cannot be proven.
-- Put a `capabilityGraph` in the Canonical Contract. It declares independent stopping points, typed handoffs, optional dependencies, and hard prerequisites; it is not a fixed linear flow. Mark source-observed combinations as `observed` and contract-compatible new combinations as `derived composition`.
-- Ensure the goal model supports information arriving in different orders. Reuse still-valid values, skip unnecessary lookup calls, ask only for currently missing information, recompute requirements when conditions change, and stop as soon as the requested partial or full goal is complete.
-
-### 4. Design and implement MCP capabilities
-
-Read [mcp-tool-design.md](references/mcp-tool-design.md).
-
-- Give every public Tool a distinct business name, description, input schema, and output contract.
-- Give every Tool a user-facing top-level `title`; add business descriptions to schema properties instead of placing the title only in annotations or exposing bare types.
-- Implement one explicit handler or entry function per public Tool. Internal helpers may be shared.
-- Preserve application authentication, authorization, tenancy, validation, idempotency, and audit behavior.
-- Identify the authoritative execution boundary before choosing an adapter. When MCP runs separately from the application, prefer the application's supported API or an explicitly shared, persistent domain service. Do not bypass middleware or instantiate a second in-memory state machine that can disagree with Web/API behavior.
-- Put only proven non-bypassable identity, confirmation, provenance, ordering, transaction, at-most-once, and safety rules in schemas, handlers, server state, or deterministic workflows—not only in prose. Leave ordinary eligibility, availability, and field-level business acceptance authoritative to the target API unless source evidence proves the client must enforce a harder safety boundary.
-- Do not create a validation or preflight Tool merely to mirror every backend rule. Generate it when the client actually calls that API and it has independent value, produces a required server-issued handoff, or participates in a proven non-bypassable write constraint.
-- Never generate generic escape hatches such as `call_api`, `execute_sql`, `run_service_method`, or one operation switch that dispatches all business actions.
-- Mark side effects and require preview/confirmation or dry-run paths for destructive, financial, publishing, or external actions where supported.
-- Never accept `confirmed: true`, `userConfirmed: true`, or a similar Tool argument as proof of user consent. Confirmation belongs to the Agent Host or a trusted runtime and must bind the target, payload digest, transient validation token, and side-effect summary. If that integration does not exist, mark the capability as requiring Host integration rather than claiming it is safe.
-- Use the Canonical vocabulary for every Tool: `sideEffect` and `operationPolicy.sideEffect` are `read`, `create`, `update`, or `delete`; `operationPolicy.confirmation` is `not-required`, `trusted-confirmation-required`, or `upload-confirmation-required`. Also declare idempotency, automatic retry, and unknown-outcome handling. Express the actual enforcement owner through Consumer requirements and `workflows[].enforcement.owner`, not a second `confirmationOwner` field.
-- Classify every write in `runtimeProtection`: use `backend-authoritative` when the target API owns ordinary validation and no extra local ordering is proven; use `deterministic-workflow` only for proven non-bypassable edges; use `unresolved` when frontend evidence proves the API call but backend protection evidence is missing. An unresolved write must remain `requires-review` or `blocked` and must not guess an owner or Workflow.
-- Treat a client confirmation dialog or ordinary POST as interaction evidence, not as proof of a Host confirmation grant, operation key, protected workflow state, expiry, or single-use semantics. Generate a deterministic Workflow only when exact fact-level evidence proves the protected value producer, trusted runtime source, binding, and pre-dispatch enforcement. Otherwise keep the dialog as Skill guidance and use `backend-authoritative` or `unresolved` as appropriate.
-- For a non-idempotent multi-Tool write chain with proven non-bypassable edges, generate a deterministic workflow/Host integration contract that binds the relevant server-issued values, confirmation, and dispatch. A simple write whose ordinary business validation belongs to the target API does not require a synthetic preflight or universal grant. If the necessary hard boundary cannot be implemented and tested, leave that protected path in `requires-review`.
-- Give every hard Workflow an explicit, non-empty `capabilityIds` membership list containing its `entryCapabilityId`; all IDs must be unique known Canonical capabilities. Model every binding as a structured actual source, protected expected source, comparator, and evidence reference. Runtime-context sources name their semantic claim, generic Host requirement, and exact trusted path; protected values are keyed by the exact binding name. Expected values may come only from session-isolated protected runtime state or an immutable constant, never from the same public Tool arguments being checked. Use `dispatchWithPolicy`; the protected Guard stores both the Canonical projection rules and expected values, projects from the exact Function input and trusted runtime context itself, then dispatches that same frozen input. Do not let Function code pass a caller-projected binding object or run an arbitrary verifier callback. Zero-dispatch tests must cover mismatch, expiry, replay, and missing protected state.
-- For vNext, complete `canonical-contract.json` before runtime code, then run `scripts/derive_artifacts.py <candidate>` to mechanically create both capability-bundle copies, `capability-draft.json`, Goal/Consumer views, Host compatibility, the initial verification matrix, both Function/MCP Schema projections, and `references/capability-contracts.json`. Do not hand-author derived files. A legacy package without a Canonical Contract retains the older bundle-first derivation path. Give every Tool exactly one distinct named async Function export.
-- Preserve authoritative input grouping. Keep source-level filter, request, pagination, and option objects intact instead of flattening them from UI controls or inventing new wrappers.
-- Preserve exact HTTP method, allowlisted origin, path/query/header/body/multipart binding, authentication, success status, required output paths, and stop-on-failure semantics. Preserve fixed query parameters inside the exact URL template; do not invent non-schema extension fields or unsupported binding-source kinds. Preserve root-body bindings, multipart field names, defaults, enum membership, cross-field provenance rules, and exact response field names. Execute a request step at most once; never automatically retry a network-ambiguous write.
-- Derive `allowedRuntimeOrigins` from actual HTTP implementation steps. Require the exact non-empty allowlist when any HTTP step exists; require an empty list for an all-local package instead of inventing a placeholder origin.
-- Resolve every cross-capability `outputPath` against an exactly declared output and validate its nested Schema and cardinality. Keep upstream source strategies, dynamic domains, Goal acquisition, typed handoffs, observed graph edges, attachment consumer bindings, and implementation request bindings mechanically aligned; a prose handoff or consumer input alone is not a usable chain.
-- Compare the observed `response.status` with the exact declared `successStatusCodes`. Do not use `response.ok` or another broad 2xx shortcut when the source contract names specific accepted statuses.
-- Use the source's externally observable names verbatim. Do not rename `status` to a more descriptive alias, turn a root request body into `{request: ...}`, omit a fixed query parameter, or model multipart data as ordinary JSON.
-- Infer request and response types from executable transfer contracts plus the client's actual adapter, using backend contracts to supplement the client-visible boundary without binding discovery to DTO names or one architecture. Runtime samples verify a Schema but never define it. Preserve optionality separately from nullability; a single observed `null` must not narrow a source-compatible string to null-only. For any structurally optional input (`required: false` with no `requiredWhen`) supplied by an observed upstream Tool, require its exact handoff and graph edge to remain optional/non-hard, then declare `targetRequiredness.status` as `proven-optional` when executable evidence proves omission is allowed, or `unproven` with an exact `normalProvider` when it does not. The latter needs request/call or behavior-test evidence from the feature boundary's primary source; supplementary backend evidence and a transport contract alone cannot prove the observed normal provider. Keep the input optional, document that provider as a recommendation rather than a hard precondition, let the target API return the final structured acceptance decision, surface the uncertainty in `reviewItems`, and require the controlled omission vector derived from the contract.
-- Define `successRule.requiredOutputPaths` relative to the Function result's raw `data`; never prefix those paths with the MCP envelope key `data`. A business output field actually named `status` remains valid.
-- Keep `requiredOutputPaths` minimal and contractual: include the smallest fields that prove the result is usable, not every echoed or incidental response field. Copy the source's actual failure keys into `forbiddenOutputKeys`; do not substitute a conventional list.
-- Enforce proven response invariants as well as field presence: reject null or empty required values, validate fixed discriminator values, and require non-empty collections only when executable source evidence establishes that invariant.
-- Use only the standard JSON Schema `format: "uri"` for source-defined URL strings. Reject `format: "url"`; keep opaque tokens, file IDs, and object keys as non-URI strings.
-- Keep `function-core/index.mjs` self-contained apart from statically imported, non-effectful `node:` built-ins accepted by the validator and the exact generated `../portable-workflow-guard.mjs` import required by a proven deterministic Workflow. Do not import filesystem, process-spawning, socket/HTTP, dynamic-module, VM, worker, or equivalent effectful Node modules; business I/O goes through the reviewed Canonical dispatch boundary. Every named Function validates exact direct inputs and returns one `{status, data}` result; npm dependencies and protocol schemas belong to the MCP adapter.
-- When source evidence proves an attachment-dependent client path, generate the business upload Function and MCP Tool, returned token/URL handoff, downstream binding guidance, and tests. Accept Host-approved attachment references or sanitized bounded content such as filename, media type, size, digest, and base64 content; never accept an arbitrary local file path. An opaque Host grant is metadata, not upload bytes: represent a generic `attachment-resolution` implementation binding before the business upload, never send the grant object itself as file content, and make `attachments.contentBindings` uniquely and exactly cover every input, resolver requirement, final output step, request location, and body/multipart field that receives resolved content. Each exact upload field must cite fact-level request-construction, serialization, or transport-contract evidence shared with the matching implementation binding; a user-entry, generic API-call, or side-effect fact alone cannot prove a multipart/body path.
-- Do not treat STS credentials, a presign/token response, or upload authorization alone as the completed attachment capability. Keep storage credentials internal to the generated implementation, perform the source-proven transfer, and expose only the business URL/token/file ID/object required downstream. If the business transfer contract is unavailable, mark only the affected path `requires-review` or `blocked`; use `requires-host-integration` only when that contract is complete but the Consumer cannot provide or resolve approved attachment content. Never pretend that accepting a URL or exposing credentials completed the chain.
-- Treat attachment receipt as a Consumer Host responsibility. Code2Skill does not implement chat ingress, file receipt/download, or brand-specific adapters. If the Consumer cannot provide or resolve an approved attachment, disable the affected path or mark it `requires-host-integration`; never replace the missing chain with an arbitrary path or unproven URL.
-- Preserve failures as structured Tool errors. Distinguish at least input/schema, business, authorization, upstream/network, malformed-output, and unknown-write-outcome classes when evidence permits; retain source error codes, messages, field details, retryability, and outcome certainty instead of collapsing them into an opaque exception string.
-- Import the byte-exact normalizer and call `normalizeToolError(error, <literal Canonical operationPolicy>)` with exactly two arguments in every Tool catch. A write Function may set `outcomeKnown: true` only after a response-proven backend rejection or a deterministic pre-dispatch Guard failure; preserve its structured business code but keep `retryable: false` because a corrected request is a new attempt, not automatic replay. Transport errors, timeouts, disconnects, and write errors without that trusted marker normalize to `UNKNOWN_DISPATCH_OUTCOME` with `retryable: false`, regardless of their code or retry hint.
-- Implement direct MCP arguments, closed schemas, Chinese Tool titles/descriptions, complete annotations, `content` plus matching `structuredContent`, and `isError: true` Tool errors. Implement a literal `process.env.<declared-variable> === "1"` dry-run guard before every external action and named Function call. Build one local `dryRunResult` containing exactly `dryRun`, `validatedInput`, `operationPolicy`, and `operationSummary`, then return it as `structuredContent` plus a JSON text `content` projection; derive policy and request-summary fields from the capability contract rather than executing or guessing them.
-- Register every Tool with its literal name in a distinct `server.registerTool("tool_name", ...)` call. Do not generate a loop that dynamically registers bundle entries and do not hand-roll JSON-RPC.
-- Each literal Tool callback must invoke exactly its matching Canonical named Function export. Swapped callbacks, duplicated business execution in the adapter, or a registration that never calls its Function are invalid.
-- Make the strict export executable after it is copied away from the source repository. Keep the readable adapter in `mcp-tool/index.mjs`, import `McpServer`, `StdioServerTransport`, and `z` from `./runtime.mjs`, and build `runtime.mjs` by bundling the official MCP SDK and Zod from [mcp-runtime-entry.mjs](assets/mcp-runtime-entry.mjs). The vNext runtime is one self-contained file: no relative or dynamic imports and no client-network or process-control primitives. Minify it so dependency examples in third-party comments cannot be mistaken for unresolved imports. Do not bundle the adapter itself: its literal registrations, direct Zod schemas, and named `../function-core/index.mjs` imports must remain inspectable.
-- Keep module import/initialization free of network, file, process, upload, and business-dispatch effects. Function helpers only declare behavior; MCP module setup contains literal registrations and the one reviewed stdio `server.connect(new StdioServerTransport())` startup, while every business effect remains behind a Tool callback, dry-run boundary, and matching named Function.
-- Use only direct top-level Zod input types (`string`, `number`, `boolean`, `object`, or `array`) plus refinements. Avoid top-level unions or transformed wrappers that obscure the capability bundle's declared input type.
-- Give every Tool a discoverable Chinese `领域：动作对象` title and a substantive description of at least 110 characters and 60 Chinese characters. The description must cover purpose, calling condition, inputs or no-input state, output, downstream handoff or independent stop, HTTP/local behavior, and read/write side effects.
-
-### 5. Generate the knowledge documents
-
-Read [observed-skill-design.md](references/observed-skill-design.md) and [documentation-contract.md](references/documentation-contract.md).
-
-- Create an Agent Skills-compatible folder with a concise `SKILL.md` and on-demand references.
-- Identify the Skill as `observed`: it is reconstructed from an existing product flow and supported by code evidence.
-- Explain when each Tool is useful, what inputs must be collected, what calls may be skipped, what dependencies cannot be skipped, common compositions, failure recovery, and result interpretation.
-- Guide progressive completion: begin with the user's stated goal and known information, then obtain only the currently missing values from trusted context, read-only Tools, or concise questions. Do not demand every field up front, repeat still-valid questions, or call a lookup Tool when the required value is already proven and fresh.
-- Permit partial goals. A user asking for one option list, one detail, or one page of results should not be forced through the full original screen flow.
-- Permit temporary composition with other contract-compatible Tools and Skills. Clearly label combinations not observed in the source as `derived composition`; allow flexible read-only composition while keeping all write guards unchanged.
-- Reference `references/feature-context.md` rather than duplicating business background throughout the Skill. `SKILL.md`, `MCP.zh-CN.md`, and Feature Context must name `references/capability-contracts.json` as authoritative and carry its current SHA-256 marker. Narrative text explains goals and recovery but must not invert its requiredness, types, domains, sources, freshness, side effects, error paths, attachment bindings, or operation policy.
-- Generate `references/feature-context.md` as the source-derived business understanding visible to the Agent, `SKILL.md` as conditional usage knowledge, `MCP.zh-CN.md` as the exact executable Tool contract, and `MCP-SETUP.md` as platform-neutral startup/registration/authentication guidance. vNext does not generate `PAGE.md` and does not assume a page or route exists. Legacy `PAGE.md` may be read for migration, but it is not a vNext output.
-- Include the generic Skill installation form `npx skills add ./generated/code2skill/<feature-id> -a <agent-id> -g -y`. State that it installs only the Skill; MCP startup, Host registration, authentication injection, and environment configuration are separate steps documented in `MCP-SETUP.md`.
-- Meet the structural, Chinese-language, per-Tool, handoff, example, output, failure, dry-run, and side-effect requirements in the documentation contract. Do not use filler to reach the length threshold.
-
-### 6. Build the strict export
-
-Read [artifact-contract.md](references/artifact-contract.md).
-
-- Start vNext from `assets/source-topology.json`, `assets/canonical-contract.json`, `assets/host-profile.json`, `assets/export-profile.json`, `assets/feature-context.md`, `assets/MCP-SETUP.md`, and the byte-exact `assets/portable-error-normalizer.mjs`; replace every synthetic example and placeholder and copy the normalizer to the candidate root. Copy Feature Context to `references/feature-context.md`, not the package root. Use `assets/verification-report.schema.json` as the finalizer input contract, never `assets/verification-report.md`, which is retained only as a legacy human summary. Goal, Consumer, compatibility, bundle, draft, and verification-matrix files are generated views and intentionally have no hand-authored vNext templates. Legacy exports may still use the documented bundle/draft and `PAGE.md` compatibility path.
-- Author the vNext inputs `source-topology.json`, `canonical-contract.json`, and the deployment-supplied `host-profile.json`. Derive `goal-contract.json`, `consumer-requirements.json`, `host-compatibility-report.json`, and `verification-matrix.json`. The capability graph and Consumer requirement definitions live inside the Canonical Contract; do not maintain duplicate authoring sources.
-- Treat `host-profile.json` as deployment evidence, not a Producer or brand assumption. Compare it deterministically with `consumer-requirements.json`. Enable, disable, block, or mark `requires-host-integration` per capability when trusted confirmation, session state, approved attachment resolution, authentication injection, transport, or unknown-outcome reconciliation is unavailable. Keep this Host status separate from Canonical `readiness`: source/contract uncertainty remains `requires-review` in the verification state and must never be mislabeled as a missing Host integration. The Host supplies an approved reference or bounded content; the generated business Tool owns the source-proven upload request.
-- Run `scripts/derive_artifacts.py <candidate>` after every Canonical Contract change. For vNext it projects `capability-bundle.json`, its Function mirror, `capability-draft.json`, Goal/Consumer views, Host compatibility, and the verification matrix from the completed contract. The draft keeps one qualified `tools.<tool>.input.<name>` input and provenance record per public input plus one qualified `<tool>.<step>` request-chain record per HTTP step. Do not edit those projections or maintain an unrelated page-global input list.
-- Generate the complete strict export tree. In vNext, hard workflows live only in `canonical-contract.json`; include `portable-workflow-guard.mjs` and runtime integration only when at least one proven non-bypassable workflow exists. Do not impose a universal Workflow or preflight grant on ordinary writes. `workflow.json` is omitted to avoid a second source of truth. Legacy bundle-only exports keep their existing constrained `workflow.json` contract.
-- Keep the capability set identical across both bundle copies, named Function exports, MCP `tools/list`, Tool call dispatch, Skill, MCP documentation, and Feature Context capability references.
-- Derive or deterministically cross-check Function validation, MCP schemas and registrations, Skill claims, workflow guards, and test vectors against the Canonical Contract. Runtime Profile details may add transport and packaging behavior but must not change business names, requiredness, value domains, failures, or safety policy.
-- Keep all evidence references source-derived. `capability-draft.json` may be `ready` only when material evidence is complete; otherwise stop before approval.
-
-### 7. Verify behavior, not just structure
-
-Read [verification.md](references/verification.md).
-
-- Run the repository's relevant static checks, build, unit tests, and MCP protocol tests.
-- Test every Tool independently with valid and invalid inputs.
-- Use the Canonical-derived minimum verification checks rather than a hand-picked smoke list. Derivation always requires valid input/output, invalid-input rejection, and structured error recovery, then adds checks for HTTP bindings/status, dynamic values, conditional branches, attachments, writes, backend-authoritative rejection, Goal information ordering/minimal questioning, and derived composition as applicable. Declared custom checks may only add to this set; a passed phase missing any required `checkId` must fail finalization.
-- For every write, test both sides of outcome certainty: a response-proven backend rejection marked `outcomeKnown: true` preserves its actionable code with no automatic retry, while a timeout/connection error or any unmarked write failure becomes non-retryable `UNKNOWN_DISPATCH_OUTCOME` and requires reconciliation.
-- Test representative partial and multi-Tool compositions.
-- Test progressive collection with information supplied in different orders and with all information supplied up front. Prove that the Skill neither repeats questions nor calls irrelevant Tools.
-- Test representative `derived composition` paths separately from observed paths.
-- Test runtime rejection of fabricated IDs, invalid source tokens, unauthorized access, unsafe parameters, and skipped hard preconditions.
-- Validate the generated artifact bundle:
-
-```bash
-python3 <skill-root>/scripts/validate_artifacts.py \
-  generated/code2skill/<feature-id> \
-  --source-map client=/authorized/client-root \
-  --source-map service=/authorized/service-root \
-  --pre-finalize
+```text
+generated/code2skill/<feature-id>/
+├── SKILL.md
+├── MCP-SETUP.md
+├── package.json              # 声明 code2skill.profile=core-export-v1
+├── function-core/
+│   └── index.mjs
+├── mcp-tool/
+│   └── index.mjs
+├── portable-error-normalizer.mjs
+├── tests/
+│   └── *.test.mjs
+└── references/
+    └── feature-context.md     # 仅在业务背景无法简洁写入 SKILL 时生成
 ```
 
-- Repeat `--source-map sourceId=/absolute/authorized/root` for every available root declared by `source-topology.json`. Use the legacy `--source-root` base only when every portable root is intentionally relative to one already authorized workspace. Never widen that base merely to reach unrelated repositories.
+不要在默认包中生成 Canonical/Goal Contract、Source Topology、Capability Graph、Host Profile、兼容性报告、MCP 长文档、Verification Matrix、Approval Audit、live receipt、manifest、Hash 收据或其他审计文件。临时分析笔记和测试输出不进入交付包。
 
-- Run Function unit vectors for every capability, including input/conditional/request-binding/status/network/output failures. The deterministic derivation writes identical `function-core/schema-contract.json` and `mcp-tool/schema-contract.json`; generated implementations and tests must consume or verify those projections rather than retyping a second contract. Use the bundled detached MCP probe for initialize, `tools/list`, unknown-Tool protocol errors, one successful call per Tool, every required-argument failure, and one dry-run call per write Tool with zero external effects:
+代码是后续维护依据：Function 是业务执行真相，MCP 是标准适配层，Skill 是 Agent 使用知识。避免用多份 JSON 和长文档重复描述同一事实。
+
+## 默认工作流程
+
+### 1. 确定范围
+
+- 从用户指定的页面、目录、接口、路由、符号或功能目标开始。
+- 只搜索用户明确授权的源码根；不要扫描整台机器寻找可能存在的后端。
+- 目标单位是一个完整业务功能，不是整个仓库，也不是单个文件摘要。
+- 先读取目标仓库规则和已有测试，保留无关改动。
+
+### 2. 从客户端确定能力面
+
+对于前端功能，以客户端实际调用的后端 API 为 Function/MCP 候选面，并只引入会影响这些接口的前端逻辑：
+
+- 请求方法、地址、query/header/body/multipart 构造；
+- 前端真正使用的响应字段；
+- 默认值、字段转换、动态选项、条件输入和错误处理；
+- 用户目标、主要分支、停止点和提交前展示信息；
+- 附件上传结果如何绑定后续请求。
+
+不要因为后端存在某个内部方法就自动暴露 Tool，也不要把每个页面、请求、控件或输入框机械地变成 Tool。
+
+页面写死的菜单、文案和配置优先写入 Skill 或可选 Feature Context。只有当一份本地数据可以独立满足用户目标、需要被多个能力复用，或确实需要运行时读取时，才生成 Tool。
+
+### 3. 有限核对后端
+
+后端默认只用于补齐或核对公开传输契约：
+
+- Request/Response 结构与可空性；
+- 鉴权头或公开身份边界；
+- 统一响应信封、业务错误字段和成功条件；
+- 明确公开的枚举及附件上传接口。
+
+合同已经足够生成时停止。不要默认继续追踪 Service、持久化、消息、审批、下游 RPC、完整副作用和所有业务校验。
+
+只有以下情况才继续深入：公开契约互相矛盾；操作具有明显金融、删除、发布或高风险影响；源码明确存在不可绕过的安全凭证/顺序；或用户明确要求深度审计。
+
+普通业务是否接受请求，以真实后端 API 为权威。不要在 Function 中复制整套后端规则；保留结构化业务错误，让 Consumer Agent 补充信息或解释失败。
+
+### 4. 设计能力
+
+一个 Tool 应表达可独立命名、调用、复用或停止的业务能力。按业务意义、输入输出稳定性和副作用拆分，而不是按代码文件或 HTTP 数量拆分。
+
+对每个能力只确定执行所需的最小契约：
+
+- 稳定 Tool 名、中文标题和说明；
+- 直接输入及运行时真正执行的闭合 Schema；
+- 前端消费、下游 handoff 和最小成功判断所需的输出；
+- 精确请求绑定和成功状态；
+- read/create/update/delete 副作用；
+- 结构化错误和自动重试策略。
+
+不要枚举前端不读取的全部返回字段。未被使用的响应内容可以保留在开放的 `data` 对象中，不要根据单次样本把字符串、数字或对象永久收窄为 `null`。
+
+普通写接口默认由后端负责业务校验。只有源码明确证明存在不可绕过的身份、来源、事务、单次凭证或顺序约束时，才实现确定性 Guard；页面确认框和普通 POST 本身不构成自定义 Host Guard 的证据。
+
+### 5. 实现 Function 与 MCP
+
+- 每个公共 Tool 有一个同名语义的独立 async Function export。
+- 每个 Function 同文件导出可识别的输入/输出 Zod Schema（建议使用 `<functionName>InputSchema` 与 `<functionName>OutputSchema`）；Function 自身必须执行这些 Schema，不能只把 Schema 写给 MCP 看。
+- Function 负责输入校验、请求构造、成功结果和结构化错误；MCP callback 只做协议适配，不复制业务请求。
+- MCP 使用官方 SDK 和 Zod，通过 `package.json` 固定显式版本范围；默认包不内嵌庞大的 SDK bundle。
+- 每个 Tool 字面注册，提供 `title`、`description`、`inputSchema`、`outputSchema` 和 annotations。
+- MCP 直接复用 Function 导出的 Zod Schema，并从随 Skill 提供的 `portable-error-normalizer.mjs` 复用 `normalizeToolError` 和 `toMcpResult`；成功与失败由该共享 runtime 返回一致的 `content` 与 `structuredContent`，失败必须为 `isError: true`。
+- 所有外部动作位于 Tool 调用之后；模块 import/初始化不得发起业务请求。
+- 使用明确的 dry-run 环境变量，dry-run 不发网络请求或写入。
+- 默认环境不得自动指向生产并在生成/验证时请求真实接口。真实调用只有用户显式授权后才能进行。
+
+写操作不得自动重试。收到明确后端拒绝时返回可修正的业务错误；超时、断连或无法判断服务端是否已处理时返回不可重试的 `UNKNOWN_DISPATCH_OUTCOME`，要求人工对账。
+
+附件由 Consumer Host 提供批准的引用或受限内容；Code2Skill 不实现聊天接入、文件接收或下载。若源码证明存在业务上传链，则生成上传 Function/Tool 与下游绑定；若只能取得 STS/预签名凭证却不能完成上传，应在 Skill 中明确该目标尚不完整，不能假装已有 URL。
+
+### 6. 编写 Skill
+
+Skill 以前端业务功能和用户目标为核心，而不是复述页面点击步骤。它应说明：
+
+- 什么请求会触发该 Skill；
+- 每个 Tool 能做什么、何时调用或跳过；
+- 哪些信息已知、缺失、条件必填、动态取得或可选；
+- 如何逐步询问，而不是要求用户一次提供完整表单；
+- 常见组合、部分目标、停止条件和结果展示；
+- 业务拒绝、鉴权、网络、响应异常和未知写入结果如何恢复；
+- 写入前应向用户复述什么，但不得把调用者传入的 `confirmed: true` 当作可信确认。
+
+当背景知识较短时直接写入 `SKILL.md`；只有内容会明显干扰使用说明时，才生成 `references/feature-context.md`。不要重复维护同一段知识。
+
+`MCP-SETUP.md` 保持简短，只说明：`npx skills add` 只安装 Skill；`npm install` 安装 MCP 依赖；如何启动/注册 MCP；如何注入认证和 dry-run 环境变量；安装、可达、真实验证和部署是不同状态。
+
+### 7. 离线验证
+
+默认不调用真实业务接口。至少运行：
+
+1. Function 测试：合法/非法输入、精确 method/URL/query/header/body、最小输出、业务错误、网络错误和写入结果未知。
+2. MCP 测试：initialize、`tools/list`、每个 Tool 的 Schema、一次 mock/dry-run 成功、无效入参拒绝和结构化执行错误。
+3. 写能力 dry-run：证明零网络、零派发、零写入。
+4. 包测试：`npm test`，并运行精简校验器：
 
 ```bash
-python3 <skill-root>/scripts/probe_mcp.py <candidate> \
-  --call /path/to/valid-tool-call.json \
-  --error-call /path/to/execution-error-tool-call.json \
-  --dry-run-call /path/to/dry-run-tool-call.json
+python3 <skill-root>/scripts/validate_core_export.py \
+  generated/code2skill/<feature-id>
 ```
 
-- The detached probe compares the complete runtime `inputSchema`, `outputSchema`, and all four Tool annotations exactly with the Canonical projection; validates each successful result against its output Schema; checks an invalid argument case for every Tool (missing required input or an extra field for zero-input/optional-only Tools); and requires one handler-level structured `isError: true` execution-error case per Tool. Test every capability-specific invalid enum, range, conditional rule, provenance, business, authorization, request binding, and output case separately. The probe validates the dry-run envelope, while a Function/Guard test with an observed dispatcher proves zero external actions.
-- Function vectors must assert the exact URL, query serialization, lower-cased header contract, root or nested body shape, multipart field metadata, accepted status, returned field names, defaults, invalid extra keys, invalid enums/ranges/patterns, cross-field dependencies, response failure keys, and required-output rejection. A test that only proves “a request happened” is insufficient.
-- `probe_mcp.py` copies the candidate to a detached temporary directory before starting it, so no source-repository `node_modules` exists on its ancestor path. This proves `mcp-tool/runtime.mjs` is actually self-contained.
-- Execute a real MCP call for every capability claimed as `runtime-verified`; at minimum exercise one appropriate capability to establish package-level runtime reachability. Save sanitized inputs and results outside the candidate directory. Do not fabricate a successful live receipt or apply one Tool's receipt to another.
-- Record verification per capability and per declared hard workflow in `verification-matrix.json`. Distinguish `generated`, `behavior-verified`, `runtime-verified`, `host-verified`, `requires-review`, and `blocked`; one successful Tool call never approves another Tool or workflow.
-- Write a vNext JSON verification report conforming to `assets/verification-report.schema.json`. It must match the Canonical `contractId`, cover every Capability and every declared hard Workflow exactly once, record Capability `behavior/runtime/host` phases and Workflow `bypass/runtime/host` phases, and include only commands actually executed. A package with no hard Workflow has no synthetic Workflow rows. Every passed check records its exit code and evidence SHA-256. Every passed runtime check also binds the Canonical `toolName` and matching live `inputHash/resultHash`; every passed bypass check sets `zeroExternalWrites: true` and covers the Canonical workflow check IDs. Use `not-run`, `requires-review`, or `blocked` rather than omitting an unverified row.
-- For every Host-approved attachment `contentBinding`, a passed runtime phase includes an executed `attachment-resolution-runtime-vector` proof bound to the exact Canonical `stepId`, request `location`, and `path`. It proves one resolver call and one business dispatch on success, zero dispatch on resolution failure, no raw-grant forwarding, resolved-content binding, and size/digest verification. Compute `traceEvidenceHash` from the canonical JSON of the proof without that field and require the check's `evidenceHash` to equal the same digest.
+`package.json` 必须包含 `"code2skill": {"profile": "core-export-v1"}`。精简校验器会执行语法检查，并以凭证清理后的固定 `node --test` 命令运行包内测试；它不安装依赖，也不宣称网络隔离，因此先运行 `npm install`，测试自身仍必须 mock 外部请求并遵守 `CODE2SKILL_DRY_RUN=1`。只有排查包结构时才使用 `--skip-tests`，此时结果不得称为“已验证可运行”。
 
-Then finalize:
+测试代码保留在包内，测试日志和收据不保留。若某个能力无法离线证明，应在 Skill 或交付说明中写清边界，不要为通过验收生成伪证据。
 
-```bash
-python3 <skill-root>/scripts/finalize_export.py \
-  generated/code2skill/<feature-id> \
-  --source-map client=/authorized/client-root \
-  --source-map service=/authorized/service-root \
-  --verification-report /path/to/executed-checks.json \
-  --live-input /path/to/first-capability-input.json \
-  --live-result /path/to/first-capability-result.json \
-  --live-input /path/to/second-capability-input.json \
-  --live-result /path/to/second-capability-result.json
-```
+### 8. 交付报告
 
-- Supply `--live-input` and `--live-result` in matching order and repeat the pair for each Capability with live evidence; a file may instead contain a `capabilities` array. Every entry names `capabilityId`; the input wraps the exact Canonical Tool call under `input`, and the result wraps a successful contract-valid MCP result under `result`. A Capability without its own pair cannot become `runtime-verified`. The aggregate legacy report plus one live pair is allowed only for a single read-only bundle without `canonical-contract.json`.
-- The finalizer must match every passed runtime check's Canonical `toolName`, `inputHash`, and `resultHash` to that Capability's live pair. If final validation fails, it restores the pre-finalization audit files so an invalid receipt, matrix, approval, or manifest cannot remain looking complete.
+只报告用户真正需要的状态：生成了哪些能力、离线测试是否通过、是否调用过真实环境、是否安装/注册/部署，以及仍存在的具体限制。不要把“文件已生成”“MCP 能启动”“真实业务已验证”和“已部署”混成一个结论。
 
-- Run the target repository's evaluator when one exists, then re-run `validate_artifacts.py` without `--pre-finalize`.
-- If an old Golden encoded a different capability model, retain it only as superseded audit history and rebuild the current baseline.
-- Test Host degradation deterministically: missing confirmation disables protected final writes, missing session state disables one-time bound write chains, and missing attachment support disables attachment-dependent goals without removing unrelated read capabilities.
-- Set `hostVerified: true` only when that Capability's Host phase passed and its compatibility assessment is `enabled`; a Workflow additionally requires every Capability named by its Canonical `capabilityIds` to be enabled. A write always requires Host verification for approval. Do not translate Canonical `requires-review` into a Host integration status.
+## 严格审计模式（显式开启）
 
-### 8. Report with boundaries
+`strict-export-v1` 保留兼容，但不再默认执行。只有用户明确要求以下任一内容时才启用：完整证据链、Canonical/Goal Contract、Host compatibility、逐能力 verification matrix、live receipt、finalization、完整 manifest、外部 evaluator 或合规/高风险审计。
 
-Lead with what is actually usable. Separate:
+不要因为用户说“稳定”“可用”“完整”就自行升级到严格模式。升级前说明它会扩大源码范围、产物和耗时。
 
-- capability model and artifact completion;
-- static checks and tests;
-- build/protocol verification;
-- runtime or end-to-end verification;
-- deployment status;
-- inferences, unknowns, and remaining safety risks.
+严格模式继续使用：
 
-Never collapse “generated,” “builds,” “verified against a live system,” and “deployed” into one status.
+- [vnext-architecture.md](references/vnext-architecture.md)
+- [capability-model.md](references/capability-model.md)
+- [evidence-and-discovery.md](references/evidence-and-discovery.md)
+- [mcp-tool-design.md](references/mcp-tool-design.md)
+- [observed-skill-design.md](references/observed-skill-design.md)
+- [documentation-contract.md](references/documentation-contract.md)
+- [artifact-contract.md](references/artifact-contract.md)
+- [verification.md](references/verification.md)
+- `scripts/run_pipeline.py`
 
-## Non-negotiable checks
+现有 strict 包和校验器继续兼容；不得在同一目录混合 core 与 strict 文件。需要从 core 升级为 strict 时，使用新的工作目录并补充严格模式所需证据，不把 core 的离线通过伪装成审计完成。
 
-- No page-level mega-tool when independently valuable capabilities exist inside the feature.
-- No one-request-equals-one-Tool rule.
-- No important business claim without evidence classification.
-- No write capability inferred from client code alone and presented as production-safe.
-- No hard constraint enforced only by Skill prose.
-- No Tool input that lets the Agent self-attest user confirmation.
-- No non-idempotent operation with automatic retry or an undefined unknown-outcome policy.
-- No MCP adapter that bypasses the authoritative auth/transaction/state boundary or creates a private duplicate of mutable application state.
-- No observed Skill that merely explains how to call one oversized Tool.
-- No fixed Tool count treated as a general formula; counts are feature-specific Golden results.
-- No passed preflight, approval, live verification, or manifest produced from invented evidence.
-- No target evaluator's private cases, Golden answers, fixtures, source code, or product-specific constants copied into the Code2Skill package.
-- No language, framework, filename, directory layout, DTO/Controller/Service convention, Runtime Profile, or Agent brand treated as a prerequisite for business-contract discovery.
-- No whole-machine search for an undeclared backend or contract repository.
-- No dynamic catalog frozen into a static enum from one observed user, tenant, session, or test run.
-- No package-level success used to conceal an unverified or blocked capability/workflow.
-- No generated Skill that requires all user inputs up front or turns the original page sequence into the only legal composition.
-- No backend-internal method added to a client feature's public capability surface without a client-observed API call or explicit scope expansion.
-- No ordinary backend business rule duplicated as a universal preflight or hard Workflow merely to make the generated package appear complete.
-- No opaque error string that prevents the Consumer Agent from distinguishing a correctable business rejection from authorization, network, malformed-output, or unknown-write-outcome failure.
-- No generated package that claims Skill installation also starts, registers, authenticates, or verifies its MCP server.
+## 默认不可妥协的底线
 
-## Resource map
-
-- [capability-model.md](references/capability-model.md): definitions and boundary decisions.
-- [vnext-architecture.md](references/vnext-architecture.md): Producer/Consumer separation, Portable Core, progressive goals, portability, and migration boundaries.
-- [evidence-and-discovery.md](references/evidence-and-discovery.md): tracing and evidence classification.
-- [mcp-tool-design.md](references/mcp-tool-design.md): Tool, Resource, schema, and runtime rules.
-- [observed-skill-design.md](references/observed-skill-design.md): generated Skill structure and composition guidance.
-- [documentation-contract.md](references/documentation-contract.md): Chinese Feature Context, Skill, MCP, and MCP setup documentation bar.
-- [artifact-contract.md](references/artifact-contract.md): self-contained strict export, runtime, audit, and integrity contract.
-- [verification.md](references/verification.md): verification matrix and superseded baselines.
-- `assets/`: templates to copy into generated output.
-- `scripts/validate_artifacts.py`: deterministic pre-finalization and final package validation.
-- `scripts/derive_artifacts.py`: deterministic bundle mirroring and capability-draft derivation.
-- `scripts/finalize_export.py`: evidence-gated receipts, approval, live hashes, and integrity manifest.
-- `scripts/probe_mcp.py`: detached stdio MCP initialize/list/call/dry-run protocol probe.
+- 不生成页面级 mega-tool，也不机械执行一接口一 Tool。
+- Schema 必须在 Function/MCP 运行时真正生效。
+- 不把动态目录冻结成一次样本枚举。
+- 不把普通后端业务规则升级成虚构的硬 Workflow。
+- 不生成任意 `call_api`、本地路径上传或自动重试非幂等写入的逃生口。
+- 不把错误压成无法恢复的一段字符串。
+- 不在默认验证中访问真实业务环境。
+- 不声称 Skill 安装等于 MCP 已注册、认证、验证或部署。
