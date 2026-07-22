@@ -20,7 +20,7 @@ Code2Skill 是一个可移植的 Agent Skill：让具备代码搜索、理解和
 
 核心原则：
 
-> MCP Tool 提供可组合的执行能力；Skill 提供领域知识、选择策略和默认流程；Agent 根据用户目标决定本次组合；Schema、Handler、Server 或确定性 Workflow 强制不可绕过的约束。
+> MCP Tool 提供可组合的执行能力；Skill 提供领域知识、选择策略和默认流程；Agent 根据用户目标决定本次组合；输入 Schema 守住请求可组装的最低边界，只有源码明确证明不可绕过的约束才进入 Handler、Server 或确定性 Workflow。
 
 Tool 数量不由页面、接口、请求或函数数量决定，而由独立业务语义、调用价值、契约稳定性和安全复用边界决定。
 
@@ -30,7 +30,7 @@ Tool 数量不由页面、接口、请求或函数数量决定，而由独立业
 
 默认生成不制作完整源码审计档案。需要 Canonical/Goal Contract、Host compatibility、verification matrix、live receipt 或 finalization 时，显式选择兼容的 `strict-export-v1`。严格架构见 [稳定产物架构](skills/code2skill/references/vnext-architecture.md)。
 
-精简包会在 `package.json` 中声明 `code2skill.profile=core-export-v1`，用于防止它被严格审计流水线误当成旧包迁移。Function 同时导出并执行 Zod 输入/输出 Schema，MCP 直接复用这些 Schema，避免“文档有 Schema、运行时却未校验”。
+精简包会在 `package.json` 中声明 `code2skill.profile=core-export-v1`，用于防止它被严格审计流水线误当成旧包迁移。Function Core 导出 Zod 输入/输出 Schema，MCP 直接复用；Function 执行输入 Schema，输出 Schema 保持为低约束的可执行边界，真实业务数据尽量原样交给调用 Agent。
 
 ## 安装
 
@@ -66,8 +66,8 @@ npx skills add . --skill code2skill -a "$AGENT_ID" -g -y
 也可以用于纠正已有页面级大 Tool：
 
 ```text
-使用 $code2skill 审计当前实现，按独立业务能力重新拆分，
-重建 Function、MCP、Skill、测试和当前 Golden；旧结果只保留为 superseded 历史。
+使用 $code2skill 检查并修正当前生成包，按独立业务能力重新拆分，
+更新 Function、MCP、Skill 和必要的冒烟测试，不扩展为严格审计。
 ```
 
 默认输出：
@@ -99,17 +99,19 @@ python3 skills/code2skill/scripts/validate_core_export.py \
   generated/code2skill/<feature-id>
 ```
 
-校验关注运行内容：命名 Function、实际执行的 Zod 输入/输出 Schema、逐 Tool 适配、结构化结果、dry-run、错误规范化、安装边界和可运行测试。默认会执行 `node --check`，再以清理业务凭证后的固定 `node --test` 命令逐个运行包内测试，不执行候选声明的 npm lifecycle；它不提供网络隔离，因此测试必须 mock 外部请求且不得调用真实业务接口。它不生成或验证审计证明。
+校验关注最小运行边界：包结构、依赖声明、JavaScript 语法、真实 MCP `initialize + tools/list` 和包内冒烟测试。它不解析 Function/MCP 的源码模板，因此允许定义表注册、共享 Schema 和共享 wrapper。默认以清理业务凭证后的固定 `node --test` 命令运行测试，不执行候选声明的 npm lifecycle；它不提供网络隔离，因此测试必须 mock 外部请求且不得调用真实业务接口。它不要求非法参数矩阵或逐 Tool MCP 调用，也不生成、验证审计证明或声称业务正确。
 
-生成 Skill 不是死板的页面操作脚本。它应先识别用户目标，复用已经取得且仍有效的信息，只补问或查询当前缺失项；用户只要部分结果时可以提前停止，信息已经齐全时也不应重复调用。派生值和动态值只能由明确能力或可信运行环境提供，不能为了省一次调用而让用户自报。Agent 可以临时组合契约兼容的 MCP Tool 和 Skill；源码中未出现的新组合会标记为 `derived composition`，写入组合仍受运行时硬约束保护。
+生成 Skill 不是死板的页面操作脚本。它应先识别用户目标，复用已经取得且仍有效的信息，只补问或查询当前缺失项；用户只要部分结果时可以提前停止，信息已经齐全时也不应重复调用。派生值和动态值只能由明确能力或可信运行环境提供，不能为了省一次调用而让用户自报。Agent 可以临时组合契约兼容的 MCP Tool 和 Skill；只有源码明确证明的不可绕过边界才成为硬 Workflow。
 
-默认只建模前端消费、下游 handoff 和最小成功判断需要的输出；普通业务校验由目标 API 负责。不要为了审计完整性追踪与公开请求无关的下游实现，也不要从一次响应样本冻结动态值或 nullable 类型。
+字段含义必须按来源、赋值过程和最终用途判断，不能按名称猜测。同名的查询参数和写入参数如果语义不同，应在公共 Function/MCP/Skill 中分别使用能表达“目录筛选”和“最终操作”等真实用途的名称，内部再映射回 API 原字段。公共能力也不等于全局前置条件；每个写能力只采用其直接客户端调用链证明的前置步骤。
 
-输入输出类型以前端真实适配后的 API 边界和可执行传输契约为准，后端类型、序列化器与测试用于补充可空性等信息；单次运行样本只做验证，不能把一次 `null` 收窄成永久的 null-only 类型。vNext 区分“字段可缺省”和“值可为 null”，输出 Schema 支持一个真实类型加 `null` 的标准 nullable 联合类型。
+输入 Schema 只约束组装已知请求所需的最低结构：调用方附带的未知字段可以被接受，但 Function 只发送源码证明需要的字段。不要显式关闭 `additionalProperties`，也不要把未知字段透传给业务 API。前端条件必填信息优先写入 Skill 进行引导，普通业务是否接受最终由后端决定。
+
+输出 Schema 是低约束的可执行边界，不是业务完整性证明。由于 MCP SDK 会校验它，core 包必须传入完整的开放 Zod 对象，而不是 `.shape`；只有客户端适配、公开契约或多个可信样本证明存在变体时才放宽具体类型，不从单一样本收窄。最低 HTTP 状态、公开响应信封和明确业务拒绝仍由 Function 识别；业务数据和控制字段缺失或无法识别时，保留原始响应并由 Agent 提示信息不足，不得默认通过后续写入。
 
 普通业务校验以真实后端 API 为权威边界，Function/MCP 不重写整套后端规则。运行时保留可机器区分的业务、权限、网络、响应格式和未知写入结果错误。只有源码明确证明不可绕过的安全边界时才生成确定性 Guard；页面确认框和普通 POST 不足以证明自定义 Host Guard。
 
-附件接收属于 Consumer Host；Code2Skill 只生成源码证明的业务上传与下游绑定。如果只能取得 STS/预签名凭证而无法完成上传，应明确说明目标未闭环，不能接受用户自报 URL 或任意本地文件路径来伪装完成。
+附件接收属于 Consumer Host；Code2Skill 只生成源码证明的业务上传与下游绑定。优先使用 `attachmentRef` 等不透明引用；只有 Host 明确保证来源与可访问性时，才把运行时注入的路径公开为 `hostFilePath`。这是一项部署信任前提，不是 Skill 文案能证明的安全保证；条件不满足时应报告附件运行条件未满足。Code2Skill 不实现消息接入、下载或通用 Host 沙箱。如果只能取得 STS/预签名凭证而无法完成上传，应明确说明目标未闭环，不能接受用户自报 URL 来伪装完成。
 
 ## 安装生成产物
 

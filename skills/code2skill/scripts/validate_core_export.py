@@ -2,9 +2,10 @@
 """Validate the small default Code2Skill delivery package.
 
 The core validator protects runtime basics without recreating the strict audit
-profile. It checks a compact package shape, shared Function/MCP contracts,
-JavaScript syntax, and repository-fixed offline tests. It never installs
-dependencies, executes npm lifecycle hooks, or calls a business API itself.
+profile. It checks a compact package shape, JavaScript syntax, MCP discovery,
+and package-provided offline smoke tests. It does not parse implementation
+templates or try to prove business correctness. It never installs dependencies,
+executes npm lifecycle hooks, or calls a business API itself.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -46,23 +48,6 @@ STRICT_ONLY_FILES = (
     "verification-matrix.json",
 )
 
-REGISTER_TOOL = re.compile(
-    r"server\.registerTool\(\s*(['\"])([a-z][a-z0-9_]*?)\1\s*,"
-)
-FUNCTION_EXPORT = re.compile(
-    r"\bexport\s+async\s+function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\("
-)
-FUNCTION_IMPORT = re.compile(
-    r"import\s*\{(?P<names>[^}]+)\}\s*from\s*['\"]\.\./function-core/index\.mjs['\"]"
-)
-RUNTIME_IMPORT = re.compile(
-    r"import\s*\{(?P<names>[^}]+)\}\s*from\s*['\"]\.\./portable-error-normalizer\.mjs['\"]"
-)
-SCHEMA_DEFINITION = re.compile(
-    r"\b(?:const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*Schema)\s*=\s*"
-    r"z\.(?:object|strictObject)\s*\("
-)
-
 
 def read_text(path: Path, errors: list[str]) -> str:
     try:
@@ -70,100 +55,6 @@ def read_text(path: Path, errors: list[str]) -> str:
     except (OSError, UnicodeError) as error:
         errors.append(f"{path.name}: cannot read UTF-8 text ({error})")
         return ""
-
-
-def strip_js_comments(source: str) -> str:
-    """Remove comments while preserving strings used by real tests."""
-    result: list[str] = []
-    index = 0
-    quote: str | None = None
-    escaped = False
-    while index < len(source):
-        char = source[index]
-        next_char = source[index + 1] if index + 1 < len(source) else ""
-        if quote is not None:
-            result.append(char)
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == quote:
-                quote = None
-            index += 1
-            continue
-        if char in {"'", '"', "`"}:
-            quote = char
-            result.append(char)
-            index += 1
-            continue
-        if char == "/" and next_char == "/":
-            index += 2
-            while index < len(source) and source[index] not in "\r\n":
-                index += 1
-            continue
-        if char == "/" and next_char == "*":
-            end = source.find("*/", index + 2)
-            index = len(source) if end < 0 else end + 2
-            continue
-        result.append(char)
-        index += 1
-    return "".join(result)
-
-
-def balanced_call(source: str, start: int) -> str | None:
-    """Return one balanced parenthesized JavaScript call."""
-    if start < 0 or start >= len(source) or source[start] != "(":
-        return None
-    depth = 0
-    index = start
-    quote: str | None = None
-    escaped = False
-    while index < len(source):
-        char = source[index]
-        if quote is not None:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == quote:
-                quote = None
-            index += 1
-            continue
-        if char in {"'", '"', "`"}:
-            quote = char
-        elif char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-            if depth == 0:
-                return source[start : index + 1]
-        index += 1
-    return None
-
-
-def tool_blocks(source: str, errors: list[str]) -> list[tuple[str, str]]:
-    blocks: list[tuple[str, str]] = []
-    for match in REGISTER_TOOL.finditer(source):
-        start = source.find("(", match.start())
-        block = balanced_call(source, start)
-        if block is None:
-            errors.append(
-                f"mcp-tool/index.mjs: cannot parse Tool block {match.group(2)}"
-            )
-        else:
-            blocks.append((match.group(2), block))
-    return blocks
-
-
-def imported_names(pattern: re.Pattern[str], source: str) -> set[str]:
-    names: set[str] = set()
-    for match in pattern.finditer(source):
-        names.update(
-            name.strip()
-            for name in match.group("names").split(",")
-            if name.strip()
-        )
-    return names
 
 
 def frontmatter_fields(text: str) -> set[str]:
@@ -233,6 +124,102 @@ def run_check(
     errors.append(f"{label}: command failed ({output or f'exit {result.returncode}'})")
 
 
+def run_mcp_protocol_probe(candidate: Path, errors: list[str]) -> None:
+    """Start the generated server and verify discovery without calling a Tool."""
+    executable = shutil.which("node")
+    if executable is None:
+        errors.append("MCP protocol smoke: required executable is unavailable: node")
+        return
+    messages = (
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "code2skill-validator", "version": "1"},
+            },
+        },
+        {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+    )
+    payload = "".join(json.dumps(message, separators=(",", ":")) + "\n" for message in messages)
+    try:
+        result = subprocess.run(
+            [executable, "mcp-tool/index.mjs"],
+            cwd=candidate,
+            env=clean_test_environment(),
+            input=payload,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        errors.append(f"MCP protocol smoke: could not complete ({error})")
+        return
+    if result.returncode != 0:
+        output = (result.stderr or result.stdout).strip()
+        errors.append(
+            f"MCP protocol smoke: server failed ({output[-800:] or f'exit {result.returncode}'})"
+        )
+        return
+    replies: dict[int, dict[str, object]] = {}
+    try:
+        for line in result.stdout.splitlines():
+            if not line.strip():
+                continue
+            message = json.loads(line)
+            if isinstance(message, dict) and isinstance(message.get("id"), int):
+                replies[message["id"]] = message
+    except json.JSONDecodeError as error:
+        errors.append(f"MCP protocol smoke: stdout is not clean JSON-RPC ({error})")
+        return
+    if not isinstance(replies.get(1, {}).get("result"), dict):
+        errors.append("MCP protocol smoke: initialize did not return a result")
+    list_result = replies.get(2, {}).get("result")
+    tools = list_result.get("tools") if isinstance(list_result, dict) else None
+    if not isinstance(tools, list) or not tools:
+        errors.append("MCP protocol smoke: tools/list did not return any Tools")
+        return
+    for index, tool in enumerate(tools):
+        if not isinstance(tool, dict):
+            errors.append(f"MCP protocol smoke: Tool #{index + 1} is not an object")
+            continue
+        name = tool.get("name")
+        if not isinstance(name, str) or not name:
+            errors.append(f"MCP protocol smoke: Tool #{index + 1} has no name")
+            name = f"#{index + 1}"
+        for field in ("title", "description"):
+            value = tool.get(field)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"MCP protocol smoke: Tool {name} has no {field}")
+        annotations = tool.get("annotations")
+        if not isinstance(annotations, dict):
+            errors.append(f"MCP protocol smoke: Tool {name} has no annotations")
+        else:
+            for hint in (
+                "readOnlyHint",
+                "destructiveHint",
+                "idempotentHint",
+                "openWorldHint",
+            ):
+                if not isinstance(annotations.get(hint), bool):
+                    errors.append(
+                        f"MCP protocol smoke: Tool {name} annotation {hint} must be boolean"
+                    )
+        for field in ("inputSchema", "outputSchema"):
+            schema = tool.get(field)
+            if not isinstance(schema, dict):
+                errors.append(f"MCP protocol smoke: Tool {name} has no {field}")
+            elif schema.get("additionalProperties") is False:
+                errors.append(
+                    f"MCP protocol smoke: Tool {name} {field} rejects undeclared fields; "
+                    "core schemas must remain open"
+                )
+
+
 def validate(candidate: Path, *, run_tests: bool = True) -> list[str]:
     errors: list[str] = []
     for relative in REQUIRED_FILES:
@@ -244,15 +231,11 @@ def validate(candidate: Path, *, run_tests: bool = True) -> list[str]:
                 f"{relative}: strict audit artifact is not part of core-export-v1"
             )
 
-    test_files = sorted((candidate / "tests").glob("*.test.mjs"))
+    test_files = sorted((candidate / "tests").rglob("*.test.mjs"))
     if not test_files:
         errors.append(
             "tests: core-export-v1 requires at least one runnable *.test.mjs file"
         )
-    test_code = strip_js_comments(
-        "\n".join(read_text(path, errors) for path in test_files)
-    )
-
     skill = read_text(candidate / "SKILL.md", errors)
     if not {"name", "description"}.issubset(frontmatter_fields(skill)):
         errors.append("SKILL.md: frontmatter must contain name and description")
@@ -299,7 +282,15 @@ def validate(candidate: Path, *, run_tests: bool = True) -> list[str]:
             )
     scripts = package.get("scripts")
     test_script = scripts.get("test") if isinstance(scripts, dict) else None
-    if test_script not in {"node --test", "node --test tests/*.test.mjs"}:
+    try:
+        test_tokens = shlex.split(test_script) if isinstance(test_script, str) else []
+    except ValueError:
+        test_tokens = []
+    if (
+        len(test_tokens) < 2
+        or test_tokens[:2] != ["node", "--test"]
+        or re.search(r"[;&|<>`\r\n]|\$\(", test_script or "") is not None
+    ):
         errors.append("package.json: scripts.test must be a plain node --test command")
     if isinstance(scripts, dict) and any(
         name in scripts for name in ("pretest", "posttest")
@@ -309,152 +300,15 @@ def validate(candidate: Path, *, run_tests: bool = True) -> list[str]:
         )
 
     function_path = candidate / "function-core" / "index.mjs"
-    function_code = strip_js_comments(read_text(function_path, errors))
-    functions = FUNCTION_EXPORT.findall(function_code)
-    if not functions:
-        errors.append("function-core/index.mjs: no named async Function export found")
-    if len(functions) != len(set(functions)):
-        errors.append("function-core/index.mjs: Function export names must be unique")
-    schemas = set(SCHEMA_DEFINITION.findall(function_code))
-    if "from 'zod'" not in function_code and 'from "zod"' not in function_code:
-        errors.append("function-core/index.mjs: must import Zod for runtime schemas")
-    if len(schemas) < 2 * len(functions):
-        errors.append(
-            "function-core/index.mjs: each Function needs reusable input and output Zod schemas"
-        )
-    parse_count = len(
-        re.findall(r"\.(?:parse|parseAsync|safeParse|safeParseAsync)\s*\(", function_code)
-    )
-    if parse_count < 2 * len(functions):
-        errors.append(
-            "function-core/index.mjs: input and output schemas must execute at runtime"
-        )
-
     adapter_path = candidate / "mcp-tool" / "index.mjs"
-    adapter_code = strip_js_comments(read_text(adapter_path, errors))
-    blocks = tool_blocks(adapter_code, errors)
-    tools = [name for name, _block in blocks]
-    if not tools:
-        errors.append("mcp-tool/index.mjs: no literal server.registerTool call found")
-    if len(tools) != len(set(tools)):
-        errors.append("mcp-tool/index.mjs: Tool names must be unique")
-    if tools and functions and len(tools) != len(functions):
-        errors.append("mcp-tool/index.mjs: Tool count must match Function count")
-
-    core_imports = imported_names(FUNCTION_IMPORT, adapter_code)
-    missing_functions = sorted(set(functions) - core_imports)
-    if missing_functions:
-        errors.append(
-            "mcp-tool/index.mjs: missing Function imports "
-            + ", ".join(missing_functions)
-        )
-    mapped_functions: list[str] = []
-    has_write = False
-    for tool_name, block in blocks:
-        called = [
-            name
-            for name in functions
-            if re.search(rf"\b(?:await\s+)?{re.escape(name)}\s*\(", block)
-        ]
-        if len(called) != 1:
-            errors.append(
-                f"mcp-tool/index.mjs: Tool {tool_name} must call one public Function"
-            )
-        else:
-            mapped_functions.append(called[0])
-        for field in ("inputSchema", "outputSchema"):
-            match = re.search(
-                rf"\b{field}\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)", block
-            )
-            if match is None or match.group(1) not in schemas & core_imports:
-                errors.append(
-                    f"mcp-tool/index.mjs: Tool {tool_name} must reuse a Function-core Zod {field}"
-                )
-        for token in ("title", "description", "annotations", "normalizeToolError"):
-            if token not in block:
-                errors.append(f"mcp-tool/index.mjs: Tool {tool_name} is missing {token}")
-        if not re.search(
-            r"process\.env\.CODE2SKILL_DRY_RUN\s*===\s*['\"]1['\"]", block
-        ):
-            errors.append(
-                f"mcp-tool/index.mjs: Tool {tool_name} needs CODE2SKILL_DRY_RUN"
-            )
-        for error_flag in ("false", "true"):
-            if not re.search(
-                rf"\btoMcpResult\s*\([^,]+,\s*{error_flag}\s*\)",
-                block,
-                re.DOTALL,
-            ):
-                errors.append(
-                    f"mcp-tool/index.mjs: Tool {tool_name} must return "
-                    f"toMcpResult(..., {error_flag})"
-                )
-        is_write = re.search(r"\breadOnlyHint\s*:\s*false\b", block) is not None
-        has_write = has_write or is_write
-        if is_write:
-            if not re.search(
-                r"\bsideEffect\s*:\s*['\"](?:create|update|delete)['\"]", block
-            ):
-                errors.append(
-                    f"mcp-tool/index.mjs: write Tool {tool_name} needs a sideEffect policy"
-                )
-            if not re.search(
-                r"\bautomaticRetry\s*:\s*['\"]never['\"]", block
-            ):
-                errors.append(
-                    f"mcp-tool/index.mjs: write Tool {tool_name} must disable automatic retry"
-                )
-    if sorted(mapped_functions) != sorted(functions):
-        errors.append("mcp-tool/index.mjs: every Function must map to exactly one Tool")
-
-    runtime_imports = imported_names(RUNTIME_IMPORT, adapter_code)
-    if not {"normalizeToolError", "toMcpResult"}.issubset(runtime_imports):
-        errors.append(
-            "mcp-tool/index.mjs: must import normalizeToolError and toMcpResult "
-            "from the reviewed shared runtime"
-        )
-    for token in (
-        "@modelcontextprotocol/sdk",
-        "McpServer",
-        "StdioServerTransport",
-        "server.connect(new StdioServerTransport())",
-    ):
-        if token not in adapter_code:
-            errors.append(f"mcp-tool/index.mjs: missing required runtime surface {token}")
-
-    test_imports = imported_names(FUNCTION_IMPORT, test_code)
-    for function_name in functions:
-        if function_name not in test_imports:
-            errors.append(f"tests: Function tests must import {function_name}")
-    if "node:assert" not in test_code:
-        errors.append("tests: runnable tests must use node:assert")
-    if not re.search(r"\bassert\.(?:rejects|throws)\s*\(", test_code):
-        errors.append("tests: Function tests must assert invalid input")
-    for token in ("tools/list", "tools/call", "structuredContent", "isError"):
-        if token not in test_code:
-            errors.append(f"tests: MCP tests must exercise {token}")
-    for tool_name in tools:
-        if tool_name not in test_code:
-            errors.append(f"tests: MCP tests must reference Tool {tool_name}")
-    if has_write and "UNKNOWN_DISPATCH_OUTCOME" not in test_code:
-        errors.append("tests: write capabilities must cover UNKNOWN_DISPATCH_OUTCOME")
-
-    normalizer = candidate / "portable-error-normalizer.mjs"
-    reviewed = (
-        Path(__file__).resolve().parent.parent
-        / "assets"
-        / "portable-error-normalizer.mjs"
-    )
-    if normalizer.is_file() and reviewed.is_file():
-        if normalizer.read_bytes() != reviewed.read_bytes():
-            errors.append(
-                "portable-error-normalizer.mjs: must match the reviewed shared runtime"
-            )
+    read_text(function_path, errors)
+    read_text(adapter_path, errors)
 
     for path in (function_path, adapter_path):
         if path.is_file():
             run_check(["node", "--check", str(path)], candidate, path.name, errors)
     if run_tests and package_path.is_file() and test_files:
+        run_mcp_protocol_probe(candidate, errors)
         run_check(
             ["node", "--test", *(str(path) for path in test_files)],
             candidate,
@@ -492,19 +346,12 @@ def main() -> int:
         for path in candidate.rglob("*")
         if path.is_file() and "node_modules" not in path.relative_to(candidate).parts
     )
-    tool_count = len(
-        REGISTER_TOOL.findall(
-            strip_js_comments(
-                (candidate / "mcp-tool/index.mjs").read_text(encoding="utf-8")
-            )
-        )
-    )
     summary = (
-        "Code2Skill core export is valid and offline tests passed"
+        "Code2Skill core structure, MCP discovery, and package tests passed"
         if not args.skip_tests
         else "Code2Skill core structure is valid; package tests were skipped"
     )
-    print(f"{summary}: {tool_count} tools, {file_count} files")
+    print(f"{summary}: {file_count} files")
     return 0
 
 
