@@ -289,11 +289,65 @@ def _schema_object(value: Any, location: str) -> dict[str, Any]:
 
 def _normalize_schema(value: Any) -> Any:
     if isinstance(value, dict):
-        return {
+        normalized = {
             key: _normalize_schema(child)
             for key, child in value.items()
             if key != "$schema"
         }
+        declared_types = normalized.get("type")
+        if (
+            isinstance(declared_types, list)
+            and declared_types
+            and all(isinstance(item, str) for item in declared_types)
+        ):
+            normalized["type"] = sorted(declared_types)
+
+        # Zod represents nullable values as `anyOf`,
+        # while the portable Canonical projection uses the equivalent standard
+        # JSON Schema type array. Normalize only one non-null branch plus null
+        # so genuinely different union contracts remain distinct and rejected.
+        branches = normalized.get("anyOf")
+        if isinstance(branches, list) and len(branches) == 2:
+            null_branches = [
+                branch
+                for branch in branches
+                if isinstance(branch, dict) and branch.get("type") == "null"
+            ]
+            non_null_branches = [
+                branch
+                for branch in branches
+                if isinstance(branch, dict)
+                and isinstance(branch.get("type"), str)
+                and branch.get("type") != "null"
+            ]
+            outer_keywords = {
+                key: child
+                for key, child in normalized.items()
+                if key != "anyOf"
+            }
+            if (
+                len(null_branches) == 1
+                and len(non_null_branches) == 1
+                and set(null_branches[0]) == {"type"}
+                and "type" not in outer_keywords
+            ):
+                non_null = dict(non_null_branches[0])
+                non_null_type = non_null.pop("type")
+                if "const" in non_null:
+                    const_value = non_null.pop("const")
+                    non_null["enum"] = [const_value, None]
+                elif isinstance(non_null.get("enum"), list):
+                    non_null["enum"] = [*non_null["enum"]]
+                    if None not in non_null["enum"]:
+                        non_null["enum"].append(None)
+                if all(
+                    key not in outer_keywords or outer_keywords[key] == child
+                    for key, child in non_null.items()
+                ):
+                    outer_keywords.update(non_null)
+                    outer_keywords["type"] = sorted([non_null_type, "null"])
+                    normalized = outer_keywords
+        return normalized
     if isinstance(value, list):
         return [_normalize_schema(item) for item in value]
     return value

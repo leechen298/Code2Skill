@@ -672,6 +672,95 @@ def _validate_document_contract_restatements(
                 )
 
 
+def _validate_optional_upstream_guidance(
+    text: str,
+    capabilities: dict[str, dict[str, Any]],
+    diagnostics: Diagnostics,
+) -> None:
+    """Keep an observed provider recommendation distinct from API requiredness.
+
+    An optional input may still have a normal acquisition path through another
+    Tool.  The generated Skill must preserve that useful path without turning
+    it into a hard prerequisite: it names a compatible provider and leaves the
+    final omission decision to the target API.
+    """
+
+    capabilities_by_id = {
+        capability.get("capabilityId"): capability
+        for capability in capabilities.values()
+        if isinstance(capability, dict)
+        and isinstance(capability.get("capabilityId"), str)
+    }
+    paragraphs = [
+        paragraph
+        for paragraph in re.split(r"\n\s*\n", text)
+        if paragraph.strip()
+    ]
+    for capability in capabilities.values():
+        if not isinstance(capability, dict):
+            continue
+        target_tool = capability.get("toolName")
+        for input_item in capability.get("inputs", []):
+            target_requiredness = (
+                input_item.get("targetRequiredness")
+                if isinstance(input_item, dict)
+                else None
+            )
+            if (
+                not isinstance(input_item, dict)
+                or not isinstance(input_item.get("name"), str)
+                or not isinstance(target_requiredness, dict)
+                or target_requiredness.get("status") != "unproven"
+            ):
+                continue
+            normal_provider = target_requiredness.get("normalProvider", {})
+            provider = capabilities_by_id.get(normal_provider.get("capabilityId"))
+            provider_tools = {
+                provider.get("toolName")
+            } if isinstance(provider, dict) and isinstance(provider.get("toolName"), str) else set()
+            if not provider_tools:
+                continue
+            input_name = input_item["name"]
+            relevant = [
+                paragraph
+                for paragraph in paragraphs
+                if re.search(
+                    rf"(?<![A-Za-z0-9_$]){re.escape(input_name)}(?![A-Za-z0-9_$])",
+                    paragraph,
+                )
+                and any(
+                    re.search(
+                        rf"(?<![A-Za-z0-9_$]){re.escape(provider_tool)}(?![A-Za-z0-9_$])",
+                        paragraph,
+                    )
+                    for provider_tool in provider_tools
+                )
+            ]
+            if not any(
+                re.search(r"建议|正常流程|通常|优先", paragraph)
+                and not re.search(
+                    r"(?<!不)(?<!不是)(?<!并非)(?:必须|务必|需要|应当|须|只能)(?:先|优先)?调用|"
+                    r"只有.{0,30}调用.{0,30}(?:才|才能)|硬前置|不可跳过|前置条件|"
+                    r"\bmust\s+call\b|\brequired\s+precondition\b",
+                    paragraph,
+                    re.DOTALL | re.IGNORECASE,
+                )
+                and re.search(r"缺省|缺失|省略|未提供|不提供|不传|缺少", paragraph)
+                and re.search(r"是否", paragraph)
+                and re.search(r"接受|拒绝", paragraph)
+                and re.search(
+                    r"(?:目标\s*API|目标接口|后端|服务端).{0,40}(?:决定|判断|校验)",
+                    paragraph,
+                    re.DOTALL | re.IGNORECASE,
+                )
+                for paragraph in relevant
+            ):
+                diagnostics.error(
+                    "SKILL.md",
+                    f"optional upstream-provided input `{input_name}` for Tool `{target_tool}` must name a compatible provider Tool, recommend the observed acquisition path, and state that the target API decides whether omission is accepted",
+                )
+
+
 def _validate_vnext_feature_context(
     root: Path,
     capabilities: dict[str, dict[str, Any]],
@@ -842,6 +931,7 @@ def validate_documents(
         _validate_vnext_skill_metadata(root, skill, diagnostics)
         _validate_vnext_mcp_setup(root, profile, capabilities, diagnostics)
         _validate_document_contract_restatements(skill, capabilities, "SKILL.md", diagnostics)
+        _validate_optional_upstream_guidance(skill, capabilities, diagnostics)
         _validate_document_contract_restatements(mcp, capabilities, "MCP.zh-CN.md", diagnostics)
         _validate_document_contract_restatements(
             (root / "references/feature-context.md").read_text(encoding="utf-8"),
@@ -2914,7 +3004,17 @@ def validate_finalization(root: Path, diagnostics: Diagnostics) -> None:
                 return "approved"
 
             expected_capabilities = [
-                {"capabilityId": item.get("capabilityId"), "decision": item_decision(item)}
+                {
+                    "capabilityId": item.get("capabilityId"),
+                    "decision": item_decision(item),
+                    "reasons": list(item.get("reasons", [])),
+                    "issueRefs": [
+                        review_item.get("issueRef")
+                        for review_item in item.get("reviewItems", [])
+                        if isinstance(review_item, dict)
+                        and isinstance(review_item.get("issueRef"), str)
+                    ],
+                }
                 for item in matrix.get("capabilities", [])
                 if isinstance(item, dict)
             ]

@@ -538,6 +538,25 @@ class CrossArchitectureProductScenarioTest(unittest.TestCase):
             {"backend-authoritative", "deterministic-workflow"},
         )
 
+    def test_client_visible_read_semantics_do_not_require_backend_internal_side_effect_proof(self) -> None:
+        _, contract = one_capability_model("list-sample-request-kinds")
+        capability = contract["capabilities"][0]
+        client_invocation = capability["exposure"]["evidenceRefs"][0]
+        capability["evidenceCoverage"]["sideEffect"] = {
+            "declaredSideEffect": "read",
+            "assertionLevel": "fact",
+            "evidenceRefs": [client_invocation],
+        }
+
+        self.assertTrue(write_evidence_complete(capability, contract))
+
+        neighboring_write_ref = "ev-client-submit-call"
+        capability["evidenceCoverage"]["sideEffect"]["evidenceRefs"] = [
+            neighboring_write_ref
+        ]
+        capability["evidenceRefs"].append(neighboring_write_ref)
+        self.assertFalse(write_evidence_complete(capability, contract))
+
     def test_contract_discovery_does_not_require_dto_controller_or_service_names(self) -> None:
         topology, contract = one_capability_model("save-sample-draft")
         for source in topology["sources"]:

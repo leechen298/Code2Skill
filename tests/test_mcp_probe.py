@@ -11,6 +11,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROBE = REPO_ROOT / "skills" / "code2skill" / "scripts" / "probe_mcp.py"
+if str(PROBE.parent) not in sys.path:
+    sys.path.insert(0, str(PROBE.parent))
+
+from probe_mcp import _normalize_schema  # noqa: E402
 
 
 def write_json(path: Path, value: object) -> None:
@@ -27,6 +31,7 @@ def create_candidate(
     side_effect: str = "read",
     result_value_expression: str = "args.value",
     success_is_error_expression: str | None = "false",
+    nullable_output: bool = False,
 ) -> Path:
     candidate = root / "portable-synthetic-skill"
     (candidate / "mcp-tool").mkdir(parents=True)
@@ -68,6 +73,8 @@ def create_candidate(
             "annotations": annotations,
             "evidenceRefs": ["synthetic"],
         }
+    if nullable_output:
+        capability["outputs"][0]["schema"] = {"type": ["string", "null"]}
     write_json(candidate / "capability-bundle.json", {
         "schemaVersion": "v1",
         "recordingId": "synthetic-detached-probe",
@@ -107,6 +114,12 @@ def create_candidate(
             f"{{ isError: false, structuredContent: {{ status: 'success', data: {{ echo: {result_value_expression} }} }}, "
             "content: [{ type: 'text', text: JSON.stringify({ status: 'success', data: { echo: 'different' } }) }] }"
         )
+    runtime_echo_schema = (
+        "{ anyOf: [{ type: 'string' }, { type: 'null' }], "
+        "description: 'Echoed synthetic value.' }"
+        if nullable_output
+        else "{ type: 'string', description: 'Echoed synthetic value.' }"
+    )
     server_source = f"""
 import {{ createInterface }} from 'node:readline';
 
@@ -123,7 +136,7 @@ const tools = [{{
       data: {{
         type: 'object',
         additionalProperties: false,
-        properties: {{ echo: {{ type: 'string', description: 'Echoed synthetic value.' }} }},
+        properties: {{ echo: {runtime_echo_schema} }},
         required: ['echo']
       }}
     }},
@@ -180,6 +193,26 @@ createInterface({{ input: process.stdin }}).on('line', (line) => {{
 
 
 class DetachedMcpProbeTest(unittest.TestCase):
+    def test_nullable_any_of_normalization_preserves_enum_and_const_semantics(self) -> None:
+        enum_schema = _normalize_schema({
+            "anyOf": [
+                {"type": "string", "enum": ["synthetic"]},
+                {"type": "null"},
+            ],
+        })
+        const_schema = _normalize_schema({
+            "anyOf": [
+                {"type": "string", "const": "synthetic"},
+                {"type": "null"},
+            ],
+        })
+
+        self.assertEqual(enum_schema["type"], ["null", "string"])
+        self.assertEqual(enum_schema["enum"], ["synthetic", None])
+        self.assertEqual(const_schema["type"], ["null", "string"])
+        self.assertEqual(const_schema["enum"], ["synthetic", None])
+        self.assertNotIn("const", const_schema)
+
     def setUp(self) -> None:
         if shutil.which("node") is None:
             self.skipTest("Node.js is required for the detached MCP probe")
@@ -299,6 +332,23 @@ class DetachedMcpProbeTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("violates the Canonical outputSchema", result.stderr)
+
+    def test_probe_accepts_zod_any_of_for_a_portable_nullable_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = create_candidate(
+                root,
+                nullable_output=True,
+                result_value_expression="null",
+            )
+            call = root / "call.json"
+            dry_call = root / "dry-call.json"
+            write_json(call, {"name": "echo_value", "arguments": {"value": "normal"}})
+            write_json(dry_call, {"name": "echo_value", "arguments": {"value": "dry"}})
+
+            result = self.run_probe(candidate, call, dry_call)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_probe_requires_a_structured_execution_error_case_for_every_tool(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

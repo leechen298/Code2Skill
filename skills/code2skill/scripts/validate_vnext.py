@@ -16,8 +16,10 @@ from typing import Any
 
 from contract_model import (
     ContractError,
+    OBSERVED_NORMAL_PROVIDER_EVIDENCE_ROLES,
     WRITE_EVIDENCE,
     derive_bundle,
+    derive_capability_review_items,
     derive_consumer_requirements,
     derive_documentation_contract,
     derive_goal_contract,
@@ -26,6 +28,7 @@ from contract_model import (
     derive_verification_matrix,
     validate_canonical_contract,
     validate_source_topology,
+    target_requiredness_handoffs_are_optional,
     workflow_capability_ids,
     write_evidence_complete,
     json_schema_errors,
@@ -103,6 +106,21 @@ JSON_TYPES = {"string", "number", "integer", "boolean", "object", "array", "null
 MAPPING_KINDS = {"direct", "select-one", "append-to-array"}
 OBSERVED_EDGE_KINDS = {"handoff", "conditional-handoff", "hard-precondition"}
 DERIVED_EDGE_KINDS = {"optional-planning"}
+
+
+def _schema_types(schema: Any) -> tuple[str, ...]:
+    """Return the declared portable JSON types, including standard type unions."""
+
+    if not isinstance(schema, dict):
+        return ()
+    value = schema.get("type")
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return tuple(value)
+    return ()
+
+
 REQUEST_BINDING_EVIDENCE_ROLES = {
     "request-construction",
     "serialization",
@@ -123,6 +141,24 @@ INPUT_CONTRACT_EVIDENCE_ROLES = {
     "transport-contract",
     "validation",
     "workflow-test",
+}
+TARGET_REQUIREDNESS_EVIDENCE_ROLES = {
+    "proven-optional": {
+        "behavior-test",
+        "data-contract",
+        "serialization",
+        "transport-contract",
+        "validation",
+    },
+    "unproven": {
+        "behavior-test",
+        "business-rule",
+        "client-api-call",
+        "request-construction",
+        "response-consumption",
+        "transport-contract",
+        "workflow-test",
+    },
 }
 HTTP_STEP_EVIDENCE_ROLES = REQUEST_BINDING_EVIDENCE_ROLES | {"behavior-test"}
 RESPONSE_EVIDENCE_ROLES = {
@@ -168,6 +204,21 @@ ATTACHMENT_METADATA_EVIDENCE_ROLES = {
     "transport-contract",
     "serialization",
     "validation",
+}
+HARD_WORKFLOW_EVIDENCE_ROLES = {
+    "protectedValueIssuance": {
+        "protected-value-issuance",
+        "transport-contract",
+    },
+    "protectedValueBinding": {
+        "protected-value-binding",
+        "transport-contract",
+    },
+    "preDispatchEnforcement": {
+        "runtime-enforcement",
+        "business-rule",
+        "workflow-test",
+    },
 }
 REUSE_EVIDENCE_ROLES = {
     "request-construction",
@@ -344,11 +395,14 @@ def _value_schema(item: dict[str, Any]) -> dict[str, Any]:
 
 def _schema_structure(value: Any) -> Any:
     if isinstance(value, dict):
-        return {
+        result = {
             key: _schema_structure(child)
             for key, child in value.items()
             if key not in {"description", "title", "examples", "default"}
         }
+        if isinstance(value.get("type"), list):
+            result["type"] = sorted(value["type"])
+        return result
     if isinstance(value, list):
         return [_schema_structure(item) for item in value]
     return value
@@ -358,11 +412,11 @@ def _schema_at_relative_path(schema: Any, path: list[Any]) -> dict[str, Any] | N
     current = schema
     for segment in path:
         if segment == "*":
-            if not isinstance(current, dict) or current.get("type") != "array":
+            if not isinstance(current, dict) or "array" not in _schema_types(current):
                 return None
             current = current.get("items")
         else:
-            if not isinstance(current, dict) or current.get("type") != "object":
+            if not isinstance(current, dict) or "object" not in _schema_types(current):
                 return None
             properties = current.get("properties")
             if not isinstance(properties, dict) or segment not in properties:
@@ -763,13 +817,26 @@ def _validate_condition(
                     "must resolve to a field declared by the referenced information Schema",
                 )
             else:
-                schema_type = resolved_schema.get("type")
-                if operator in {"gt", "gte", "lt", "lte"} and schema_type not in {"integer", "number"}:
+                schema_types = set(_schema_types(resolved_schema))
+                non_null_types = schema_types - {"null"}
+                if (
+                    operator in {"gt", "gte", "lt", "lte"}
+                    and (
+                        not non_null_types
+                        or not non_null_types <= {"integer", "number"}
+                    )
+                ):
                     diagnostics.error(
                         f"{location}.operator",
                         "numeric comparisons require an integer or number Schema",
                     )
-                if operator in {"empty", "non-empty"} and schema_type not in {"string", "array", "object"}:
+                if (
+                    operator in {"empty", "non-empty"}
+                    and (
+                        not non_null_types
+                        or not non_null_types <= {"string", "array", "object"}
+                    )
+                ):
                     diagnostics.error(
                         f"{location}.operator",
                         "empty checks require a string, array, or object Schema",
@@ -807,8 +874,30 @@ def _validate_schema_shape(schema: Any, location: str, diagnostics: Any) -> None
         diagnostics.error(location, "must be a JSON Schema object")
         return
     schema_type = schema.get("type")
-    if schema_type not in JSON_TYPES:
-        diagnostics.error(f"{location}.type", "must be a portable JSON type")
+    if isinstance(schema_type, str):
+        schema_types = (schema_type,)
+    elif isinstance(schema_type, list):
+        schema_types = tuple(schema_type)
+        if not (
+            len(schema_types) == 2
+            and all(isinstance(item, str) for item in schema_types)
+            and len(set(schema_types)) == 2
+            and "null" in schema_types
+        ):
+            diagnostics.error(
+                f"{location}.type",
+                "portable nullable unions must contain exactly one non-null type and null",
+            )
+    else:
+        schema_types = ()
+    if (
+        not schema_types
+        or any(not isinstance(item, str) or item not in JSON_TYPES for item in schema_types)
+    ):
+        diagnostics.error(
+            f"{location}.type",
+            "must be a portable JSON type or a nullable two-type array",
+        )
         return
     common_keywords = {
         "type",
@@ -828,7 +917,10 @@ def _validate_schema_shape(schema: Any, location: str, diagnostics: Any) -> None
         "boolean": set(),
         "null": set(),
     }
-    unsupported_keywords = set(schema) - common_keywords - type_keywords[schema_type]
+    allowed_type_keywords: set[str] = set()
+    for item in schema_types:
+        allowed_type_keywords.update(type_keywords[item])
+    unsupported_keywords = set(schema) - common_keywords - allowed_type_keywords
     if unsupported_keywords:
         diagnostics.error(
             location,
@@ -840,22 +932,39 @@ def _validate_schema_shape(schema: Any, location: str, diagnostics: Any) -> None
         if not isinstance(enum, list) or not enum:
             diagnostics.error(f"{location}.enum", "must be a non-empty array")
         else:
+            enum_type = (
+                list(schema_types)
+                if len(schema_types) > 1
+                else schema_types[0]
+            )
             for index, item in enumerate(enum):
-                if json_schema_errors(item, {"type": schema_type}):
+                if json_schema_errors(item, {"type": enum_type}):
                     diagnostics.error(
                         f"{location}.enum[{index}]",
                         "must match the declared schema type",
                     )
-    if "const" in schema and json_schema_errors(schema.get("const"), {"type": schema_type}):
+    if "const" in schema and json_schema_errors(
+        schema.get("const"),
+        {
+            "type": (
+                list(schema_types)
+                if len(schema_types) > 1
+                else schema_types[0]
+            )
+        },
+    ):
         diagnostics.error(f"{location}.const", "must match the declared schema type")
-    if "format" in schema and schema.get("format") != "uri":
+    if "format" in schema and (
+        "string" not in schema_types
+        or schema.get("format") != "uri"
+    ):
         diagnostics.error(
             f"{location}.format",
             "must equal the standard JSON Schema format `uri` when declared on a string Schema",
         )
     for keyword in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"):
         if keyword in schema and (
-            schema_type not in {"integer", "number"}
+            not set(schema_types) & {"integer", "number"}
             or not isinstance(schema.get(keyword), (int, float))
             or isinstance(schema.get(keyword), bool)
         ):
@@ -875,7 +984,7 @@ def _validate_schema_shape(schema: Any, location: str, diagnostics: Any) -> None
         diagnostics.error(location, "lower numeric bounds must not exceed upper bounds")
     for keyword in ("minLength", "maxLength"):
         if keyword in schema and (
-            schema_type != "string"
+            "string" not in schema_types
             or not isinstance(schema.get(keyword), int)
             or isinstance(schema.get(keyword), bool)
             or schema.get(keyword) < 0
@@ -890,7 +999,7 @@ def _validate_schema_shape(schema: Any, location: str, diagnostics: Any) -> None
         and schema["minLength"] > schema["maxLength"]
     ):
         diagnostics.error(location, "minLength must not exceed maxLength")
-    if schema_type == "object":
+    if "object" in schema_types:
         properties = schema.get("properties")
         required = schema.get("required", [])
         if not isinstance(properties, dict):
@@ -910,7 +1019,7 @@ def _validate_schema_shape(schema: Any, location: str, diagnostics: Any) -> None
             )
         for name, child in properties.items():
             _validate_schema_shape(child, f"{location}.properties.{name}", diagnostics)
-    elif schema_type == "array":
+    if "array" in schema_types:
         if not isinstance(schema.get("items"), dict):
             diagnostics.error(f"{location}.items", "array contracts must declare an item schema")
         else:
@@ -1111,6 +1220,22 @@ def _validate_information_model(contract: dict[str, Any], diagnostics: Any) -> N
         for item in contract.get("evidenceCatalog", [])
         if isinstance(item, dict) and isinstance(item.get("evidenceId"), str)
     }
+    feature_boundary = contract.get("featureBoundary", {})
+    primary_source_field = (
+        "clientSourceIds"
+        if isinstance(feature_boundary, dict)
+        and feature_boundary.get("primaryEvidenceRole") == "client-feature"
+        else "serviceSourceIds"
+    )
+    primary_source_ids = {
+        source_id
+        for source_id in (
+            feature_boundary.get(primary_source_field, [])
+            if isinstance(feature_boundary, dict)
+            else []
+        )
+        if isinstance(source_id, str)
+    }
     requirement_host_capability = {
         item.get("requirementId"): item.get("hostCapability")
         for item in contract.get("consumerRequirements", {}).get("requirements", [])
@@ -1145,7 +1270,10 @@ def _validate_information_model(contract: dict[str, Any], diagnostics: Any) -> N
         for input_index, item in enumerate(inputs):
             input_location = f"{location}.inputs[{input_index}]"
             name = item.get("name")
-            if item.get("type") not in JSON_TYPES - {"null"}:
+            if (
+                not isinstance(item.get("type"), str)
+                or item.get("type") not in JSON_TYPES - {"null"}
+            ):
                 diagnostics.error(
                     f"{input_location}.type",
                     "must use a portable JSON input type",
@@ -1226,6 +1354,121 @@ def _validate_information_model(contract: dict[str, Any], diagnostics: Any) -> N
                             strategy_location,
                             "mappingKind and provider output schema/cardinality must match the target input",
                         )
+            upstream_strategies = [
+                strategy
+                for strategy in strategies
+                if isinstance(strategy, dict)
+                and strategy.get("kind") == "upstream-tool"
+            ]
+            needs_target_requiredness = (
+                item.get("required") is False
+                and not item.get("requiredWhen")
+                and bool(upstream_strategies)
+            )
+            target_requiredness = item.get("targetRequiredness")
+            requiredness_location = f"{input_location}.targetRequiredness"
+            if needs_target_requiredness:
+                if not target_requiredness_handoffs_are_optional(
+                    contract,
+                    str(capability_id),
+                    item,
+                ):
+                    diagnostics.error(
+                        requiredness_location,
+                        "requires every matching Canonical handoff and observed graph edge to be optional and non-hard",
+                    )
+                if not isinstance(target_requiredness, dict):
+                    diagnostics.error(
+                        requiredness_location,
+                        "an unconditionally optional input with an observed upstream provider must distinguish source-proven optionality from unproven target requiredness",
+                    )
+                else:
+                    status = target_requiredness.get("status")
+                    expected_fields = (
+                        {"status", "evidenceRefs"}
+                        if status == "proven-optional"
+                        else {"status", "normalProvider", "evidenceRefs"}
+                        if status == "unproven"
+                        else set()
+                    )
+                    if not expected_fields:
+                        diagnostics.error(
+                            f"{requiredness_location}.status",
+                            "must be proven-optional or unproven",
+                        )
+                    elif set(target_requiredness) != expected_fields:
+                        diagnostics.error(
+                            requiredness_location,
+                            "must use the closed fields for its target requiredness status",
+                        )
+                    _validate_fact_evidence_refs(
+                        target_requiredness.get("evidenceRefs"),
+                        known_evidence,
+                        evidence_by_id,
+                        TARGET_REQUIREDNESS_EVIDENCE_ROLES.get(status, set()),
+                        f"{requiredness_location}.evidenceRefs",
+                        diagnostics,
+                        purpose=(
+                            "source-proven target optionality"
+                            if status == "proven-optional"
+                            else "observed normal provider for unproven target requiredness"
+                        ),
+                    )
+                    requiredness_refs = {
+                        ref
+                        for ref in target_requiredness.get("evidenceRefs", [])
+                        if isinstance(ref, str)
+                    }
+                    input_refs = {
+                        ref
+                        for ref in item.get("evidenceRefs", [])
+                        if isinstance(ref, str)
+                    }
+                    if not requiredness_refs <= input_refs:
+                        diagnostics.error(
+                            f"{requiredness_location}.evidenceRefs",
+                            "must be retained on this exact input so target requiredness cannot borrow evidence from a neighboring field or operation",
+                        )
+                    if status == "unproven":
+                        if not any(
+                            evidence_by_id.get(ref, {}).get("semanticRole")
+                            in OBSERVED_NORMAL_PROVIDER_EVIDENCE_ROLES
+                            and evidence_by_id.get(ref, {}).get("sourceId")
+                            in primary_source_ids
+                            for ref in requiredness_refs
+                        ):
+                            diagnostics.error(
+                                f"{requiredness_location}.evidenceRefs",
+                                "must include request/call or behavior-test evidence from the feature boundary's primary source for the observed normal provider; supplementary backend evidence or a transport contract alone is insufficient",
+                            )
+                        normal_provider = target_requiredness.get("normalProvider")
+                        expected_provider_fields = {
+                            "capabilityId",
+                            "outputPath",
+                            "mappingKind",
+                        }
+                        normalized_strategies = [
+                            {
+                                "capabilityId": strategy.get("capabilityId"),
+                                "outputPath": strategy.get("outputPath"),
+                                "mappingKind": strategy.get("mappingKind"),
+                            }
+                            for strategy in upstream_strategies
+                        ]
+                        if (
+                            not isinstance(normal_provider, dict)
+                            or set(normal_provider) != expected_provider_fields
+                            or normal_provider not in normalized_strategies
+                        ):
+                            diagnostics.error(
+                                f"{requiredness_location}.normalProvider",
+                                "must exactly match one observed upstream-tool source strategy",
+                            )
+            elif target_requiredness is not None:
+                diagnostics.error(
+                    requiredness_location,
+                    "is only valid for an unconditionally optional input with an observed upstream Tool provider",
+                )
             if (
                 strategies
                 and all(
@@ -1736,7 +1979,14 @@ def _validate_information_model(contract: dict[str, Any], diagnostics: Any) -> N
                     f"{location}.annotations.idempotentHint",
                     "must match the Canonical idempotency policy",
                 )
-        _validate_runtime_protection(capability, known_evidence, location, diagnostics)
+        _validate_runtime_protection(
+            contract,
+            capability,
+            known_evidence,
+            evidence_by_id,
+            location,
+            diagnostics,
+        )
         operation_policy = capability.get("operationPolicy", {})
         confirmation_policy = (
             operation_policy.get("confirmation")
@@ -2577,8 +2827,10 @@ def _validate_operation_policy(capability: dict[str, Any], location: str, diagno
 
 
 def _validate_runtime_protection(
+    contract: dict[str, Any],
     capability: dict[str, Any],
     known_evidence: set[str],
+    evidence_by_id: dict[str, dict[str, Any]],
     location: str,
     diagnostics: Any,
 ) -> None:
@@ -2614,6 +2866,11 @@ def _validate_runtime_protection(
             "must prove which runtime owns the non-bypassable rules",
         )
     if mode == "unresolved":
+        if "hardWorkflowEvidence" in protection:
+            diagnostics.error(
+                f"{protection_location}.hardWorkflowEvidence",
+                "unresolved protection must record missing proof instead of partial hard Workflow evidence",
+            )
         if capability.get("readiness") not in {"requires-review", "blocked"}:
             diagnostics.error(
                 f"{location}.readiness",
@@ -2631,6 +2888,11 @@ def _validate_runtime_protection(
                 "unresolved runtime protection must not guess an owner or workflow",
             )
     elif mode == "backend-authoritative":
+        if "hardWorkflowEvidence" in protection:
+            diagnostics.error(
+                f"{protection_location}.hardWorkflowEvidence",
+                "backend-authoritative writes must not carry synthetic hard Workflow evidence",
+            )
         if protection.get("owner") != "target-api":
             diagnostics.error(f"{protection_location}.owner", "must equal target-api")
         if "workflowId" in protection or "workflowId" in capability:
@@ -2655,6 +2917,140 @@ def _validate_runtime_protection(
                 f"{location}.workflowId",
                 "must match runtimeProtection.workflowId",
             )
+        hard_evidence = protection.get("hardWorkflowEvidence")
+        if not isinstance(hard_evidence, dict) or set(hard_evidence) != set(HARD_WORKFLOW_EVIDENCE_ROLES):
+            diagnostics.error(
+                f"{protection_location}.hardWorkflowEvidence",
+                "deterministic protection must prove protected value issuance, final-request binding, and pre-dispatch enforcement",
+            )
+        else:
+            system_input_refs = {
+                ref
+                for input_item in capability.get("inputs", [])
+                if isinstance(input_item, dict)
+                and (
+                    input_item.get("informationClass") in {
+                        "derived",
+                        "dynamic",
+                        "attachment",
+                    }
+                    or any(
+                        (
+                            strategy
+                            if isinstance(strategy, str)
+                            else strategy.get("kind")
+                            if isinstance(strategy, dict)
+                            else None
+                        )
+                        in {
+                            "upstream-tool",
+                            "trusted-host-context",
+                            "host-approved-attachment",
+                            "bounded-content",
+                        }
+                        for strategy in input_item.get("sourceStrategies", [])
+                    )
+                )
+                for ref in input_item.get("evidenceRefs", [])
+                if isinstance(ref, str)
+            }
+            implementation = capability.get("implementation", {})
+            implementation_steps = (
+                implementation.get("steps", [])
+                if isinstance(implementation, dict)
+                else []
+            )
+            request_binding_refs = {
+                ref
+                for step in implementation_steps
+                if isinstance(step, dict)
+                for value in (
+                    step.get("evidenceRefs", []),
+                    *(
+                        binding.get("evidenceRefs", [])
+                        for binding in step.get("bindings", [])
+                        if isinstance(binding, dict)
+                    ),
+                )
+                if isinstance(value, list)
+                for ref in value
+                if isinstance(ref, str)
+            }
+            request_binding_refs.update({
+                ref
+                for binding in capability.get("attachments", {}).get("contentBindings", [])
+                if isinstance(binding, dict)
+                for ref in binding.get("evidenceRefs", [])
+                if isinstance(ref, str)
+            })
+            constraint_refs = {
+                ref
+                for constraint in capability.get("constraints", [])
+                if isinstance(constraint, dict)
+                and constraint.get("enforcement") in {
+                    "runtime",
+                    "function-and-runtime",
+                    "runtime-before-dispatch",
+                }
+                for ref in constraint.get("evidenceRefs", [])
+                if isinstance(ref, str)
+            }
+            matching_workflow = next(
+                (
+                    workflow
+                    for workflow in contract.get("workflows", [])
+                    if isinstance(workflow, dict)
+                    and workflow.get("entryCapabilityId") == capability.get("capabilityId")
+                    and workflow.get("workflowId") == workflow_id
+                ),
+                {},
+            )
+            workflow_binding_refs = {
+                ref
+                for binding in matching_workflow.get("bindings", [])
+                if isinstance(binding, dict)
+                for ref in binding.get("evidenceRefs", [])
+                if isinstance(ref, str)
+            } if isinstance(matching_workflow, dict) else set()
+            if isinstance(implementation, dict) and implementation.get("kind") == "local":
+                request_binding_refs.update(constraint_refs | workflow_binding_refs)
+            category_context_refs = {
+                "protectedValueIssuance": system_input_refs,
+                "protectedValueBinding": request_binding_refs,
+                "preDispatchEnforcement": constraint_refs | workflow_binding_refs,
+            }
+            protection_refs = set(refs)
+            for category, allowed_roles in HARD_WORKFLOW_EVIDENCE_ROLES.items():
+                category_refs = _validate_fact_evidence_refs(
+                    hard_evidence.get(category),
+                    known_evidence,
+                    evidence_by_id,
+                    allowed_roles,
+                    f"{protection_location}.hardWorkflowEvidence.{category}",
+                    diagnostics,
+                    purpose=category,
+                )
+                invalid_category_refs = [
+                    ref
+                    for ref in category_refs
+                    if evidence_by_id.get(ref, {}).get("assertionLevel") != "fact"
+                    or evidence_by_id.get(ref, {}).get("semanticRole") not in allowed_roles
+                ]
+                if invalid_category_refs:
+                    diagnostics.error(
+                        f"{protection_location}.hardWorkflowEvidence.{category}",
+                        "every hard Workflow proof must be fact-level and use a semanticRole specific to that proof category",
+                    )
+                if not set(category_refs) <= category_context_refs[category]:
+                    diagnostics.error(
+                        f"{protection_location}.hardWorkflowEvidence.{category}",
+                        "must cite evidence attached to this capability's protected input producer, actual dispatch binding, or current pre-dispatch enforcement point",
+                    )
+                if not set(category_refs) <= protection_refs:
+                    diagnostics.error(
+                        f"{protection_location}.hardWorkflowEvidence.{category}",
+                        "must be included in runtimeProtection.evidenceRefs so the protection decision retains its exact proof",
+                    )
 
 
 def _validate_outputs_and_evidence(contract: dict[str, Any], diagnostics: Any) -> None:
@@ -2686,7 +3082,10 @@ def _validate_outputs_and_evidence(contract: dict[str, Any], diagnostics: Any) -
                 if key in seen_paths:
                     diagnostics.error(f"{output_location}.path", "must be unique within the capability")
                 seen_paths.add(key)
-            if output.get("type") not in JSON_TYPES:
+            if (
+                not isinstance(output.get("type"), str)
+                or output.get("type") not in JSON_TYPES
+            ):
                 diagnostics.error(
                     f"{output_location}.type",
                     "must declare the portable JSON type exposed by the MCP output schema",
@@ -2702,10 +3101,10 @@ def _validate_outputs_and_evidence(contract: dict[str, Any], diagnostics: Any) -
                     f"{output_location}.schema",
                     diagnostics,
                 )
-                if output["schema"].get("type") != output.get("type"):
+                if output.get("type") not in _schema_types(output["schema"]):
                     diagnostics.error(
                         f"{output_location}.schema.type",
-                        "must match the output type",
+                        "must include the declared output type",
                     )
             _validate_fact_evidence_refs(
                 output.get("evidenceRefs"),
@@ -3276,7 +3675,10 @@ def _validate_graph_and_goals(contract: dict[str, Any], diagnostics: Any) -> Non
             classification = need.get("classification")
             if classification not in {"required", "optional", "requiredWhen", "derived", "dynamic"}:
                 diagnostics.error(f"{need_location}.classification", "must classify how the information is needed")
-            if need.get("type") not in JSON_TYPES - {"null"}:
+            if (
+                not isinstance(need.get("type"), str)
+                or need.get("type") not in JSON_TYPES - {"null"}
+            ):
                 diagnostics.error(
                     f"{need_location}.type",
                     "must declare the portable JSON type of the information need",
@@ -4769,6 +5171,7 @@ def _validate_verification_matrix(
         for item in contract.get("capabilities", [])
         if isinstance(item, dict)
     }
+    expected_review_items_by_id = derive_capability_review_items(contract, compatibility)
     workflow_by_id = {
         item.get("workflowId"): item
         for item in contract.get("workflows", [])
@@ -4882,6 +5285,11 @@ def _validate_verification_matrix(
             continue
         capability_id = row.get("capabilityId")
         capability = contract_by_id.get(capability_id, {})
+        if row.get("reviewItems") != expected_review_items_by_id.get(capability_id, []):
+            diagnostics.error(
+                f"{location}.reviewItems",
+                "must be derived exactly from Canonical missingEvidence, unresolved conflicts, and Host compatibility restrictions",
+            )
         if status.get("generated") is not True:
             diagnostics.error(f"{location}.status.generated", "a matrix row for an emitted capability must be generated")
         if status.get("blocked") and any(status.get(field) for field in ("behaviorVerified", "runtimeVerified", "hostVerified")):

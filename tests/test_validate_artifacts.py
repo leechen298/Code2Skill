@@ -498,6 +498,90 @@ class StrictExportValidatorTest(unittest.TestCase):
             diagnostics.errors,
         )
 
+    def test_optional_upstream_value_requires_recommendation_without_becoming_required(self) -> None:
+        capabilities = {
+            "calculate-sample-value": {
+                "capabilityId": "calculate-sample-value",
+                "toolName": "calculate_sample_value",
+                "inputs": [],
+            },
+            "submit-sample-request": {
+                "capabilityId": "submit-sample-request",
+                "toolName": "submit_sample_request",
+                "inputs": [{
+                    "name": "calculatedValue",
+                    "required": False,
+                    "requiredWhen": [],
+                    "informationClass": "optional",
+                    "sourceStrategies": [{
+                        "kind": "upstream-tool",
+                        "capabilityId": "calculate-sample-value",
+                        "outputPath": ["value"],
+                        "mappingKind": "direct",
+                    }],
+                    "targetRequiredness": {
+                        "status": "unproven",
+                        "normalProvider": {
+                            "capabilityId": "calculate-sample-value",
+                            "outputPath": ["value"],
+                            "mappingKind": "direct",
+                        },
+                        "evidenceRefs": ["ev-client-normal-provider"],
+                    },
+                }],
+            },
+        }
+        missing = validator_module.Diagnostics()
+        validator_module._validate_optional_upstream_guidance(
+            "`calculatedValue` 是可选输入。",
+            capabilities,
+            missing,
+        )
+        self.assertTrue(
+            any("optional upstream-provided input" in item for item in missing.errors),
+            missing.errors,
+        )
+
+        complete = validator_module.Diagnostics()
+        validator_module._validate_optional_upstream_guidance(
+            "正常流程建议先调用 `calculate_sample_value` 获得 `calculatedValue`；最终是否接受缺省值由目标后端决定。",
+            capabilities,
+            complete,
+        )
+        self.assertEqual(complete.errors, [])
+
+        invalid_guidance = (
+            "正常流程必须先调用 `calculate_sample_value` 获得 `calculatedValue`；最终是否接受缺省值由目标后端决定。",
+            "正常流程务必先调用 `calculate_sample_value` 获得 `calculatedValue`；最终是否接受缺省值由目标后端决定。",
+            "正常流程需要先调用 `calculate_sample_value` 获得 `calculatedValue`；最终是否接受缺省值由目标后端决定。",
+            "只有先调用 `calculate_sample_value` 才能获得 `calculatedValue`；最终是否接受缺省值由目标后端决定。",
+            "通常建议调用 `calculate_sample_value` 获得 `calculatedValue`；缺少时后端拒绝。",
+        )
+        for guidance in invalid_guidance:
+            with self.subTest(guidance=guidance):
+                mandatory = validator_module.Diagnostics()
+                validator_module._validate_optional_upstream_guidance(
+                    guidance,
+                    capabilities,
+                    mandatory,
+                )
+                self.assertTrue(
+                    any("optional upstream-provided input" in item for item in mandatory.errors),
+                    mandatory.errors,
+                )
+
+        capabilities["submit-sample-request"]["inputs"][0]["targetRequiredness"] = {
+            "status": "proven-optional",
+            "evidenceRefs": ["ev-contract-optional"],
+        }
+        proven_optional = validator_module.Diagnostics()
+        validator_module._validate_optional_upstream_guidance(
+            "`calculatedValue` 是源码明确允许省略的可选输入。",
+            capabilities,
+            proven_optional,
+        )
+        self.assertEqual(proven_optional.errors, [])
+
     def test_vnext_document_digest_must_follow_derived_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             candidate = create_base(Path(directory))

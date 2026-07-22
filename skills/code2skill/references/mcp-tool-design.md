@@ -104,7 +104,7 @@ The dry-run branch is an inspectable execution boundary. Use the exact variable 
 - Never log or embed secrets, session tokens, or sensitive payloads in generated Context or evidence.
 - Return the minimum data needed for the Agent's goal.
 
-Every side-effecting Tool must declare this manifest policy:
+Every side-effecting Tool must declare an explicit manifest policy. The following is an example for a source-proven, non-idempotent write that really requires trusted confirmation; it is not a default for ordinary writes:
 
 ```json
 {
@@ -120,6 +120,8 @@ Every side-effecting Tool must declare this manifest policy:
 
 `operationPolicy.sideEffect` must equal the capability's top-level `sideEffect`. Allowed confirmation requirements are `not-required`, `trusted-confirmation-required`, and `upload-confirmation-required`. The actual enforcement owner is declared separately through Consumer requirements and `workflows[].enforcement.owner`; do not introduce a competing `confirmationOwner` field. A Tool parameter such as `confirmed: true` is Agent self-attestation, not confirmation. Host confirmation for a risky operation should bind at least the target, payload digest, relevant preview/check token, and side-effect summary. If the Host/runtime integration is unavailable, keep the operation in `requires-review` status.
 
+Default a normal client-observed API write to `confirmation: "not-required"` and `runtimeProtection.mode: "backend-authoritative"` when the target API owns ordinary validation and the source proves no additional non-bypassable boundary. A browser dialog, button click, page sequence, authentication header, or generic session alone is interaction evidence, not proof that the Host must issue a confirmation grant, operation key, protected workflow state, expiry record, or single-use token. Generate those values only when an exact source contract proves who issues them, where the trusted runtime obtains them, what they bind, and that they are checked before dispatch. Otherwise retain the UI confirmation as Skill guidance and leave any genuinely unresolved safety question in the review report—never fabricate a Guard to make the package look safer.
+
 Set automatic retry to `never` for non-idempotent or unknown-idempotency operations. On a timeout, disconnect, or lost response after dispatch, report the outcome as unknown and require reconciliation before another attempt.
 
 For non-idempotent chains with proven non-bypassable edges, such as a server-issued validation grant → trusted confirmation → create, emit and test a deterministic workflow or Host integration contract. A short-lived confirmation grant should be bound to user/session, target, payload digest, validation token when one truly exists, expiry, and single use. A simple API write that relies on ordinary backend validation does not need a fabricated validation grant. If a required hard boundary cannot be enforced, mark the protected write path `requires-review`.
@@ -129,6 +131,8 @@ Each hard binding declares an actual source, a protected expected source, `json-
 ## Attachments
 
 When the observed client/API path proves attachments are part of the business feature, generate the business upload capability and model the chain beyond a string URL input: a Host-approved attachment reference or bounded content, upload authorization, transfer, returned token/URL/file ID/object, and downstream binding. The provider output path, target input source strategy, typed handoff, observed graph edge, attachment consumer binding, and actual implementation request binding must agree mechanically.
+
+An STS credential, presigned-request helper, upload authorization, or storage token alone is not the business upload capability and must not be exposed as if the chain were complete. The generated Function/MCP boundary owns every source-proven step needed to turn approved attachment content into the business result consumed downstream. Do not expose raw storage credentials to the model when they are only an internal implementation detail. If the authorized sources do not contain enough evidence to implement that transfer, keep only the affected attachment path below approval and state the missing upload contract; unrelated capabilities remain usable.
 
 Never accept an arbitrary local filesystem path. A public input may accept a Host-approved opaque reference, or bounded logical values such as sanitized filename, media type, size, digest, and content. Runtime enforcement must prove that downstream attachment values came from the approved upload path when the business rule requires it.
 

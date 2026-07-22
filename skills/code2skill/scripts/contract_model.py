@@ -51,6 +51,34 @@ RUNTIME_PROTECTION_MODES = {
     "deterministic-workflow",
     "unresolved",
 }
+HARD_WORKFLOW_EVIDENCE_CATEGORIES = {
+    "protectedValueIssuance",
+    "protectedValueBinding",
+    "preDispatchEnforcement",
+}
+TARGET_REQUIREDNESS_EVIDENCE_ROLES = {
+    "proven-optional": {
+        "behavior-test",
+        "data-contract",
+        "serialization",
+        "transport-contract",
+        "validation",
+    },
+    "unproven": {
+        "behavior-test",
+        "business-rule",
+        "client-api-call",
+        "request-construction",
+        "response-consumption",
+        "transport-contract",
+        "workflow-test",
+    },
+}
+OBSERVED_NORMAL_PROVIDER_EVIDENCE_ROLES = {
+    "behavior-test",
+    "client-api-call",
+    "request-construction",
+}
 WRITE_EVIDENCE = {
     "sideEffect",
     "backendContract",
@@ -118,8 +146,31 @@ def json_schema_errors(
         return [f"{path}: schema must be an object"]
     errors: list[str] = []
     expected_type = schema.get("type")
-    if isinstance(expected_type, str) and not _json_type_matches(value, expected_type):
-        return [f"{path}: expected {expected_type}"]
+    expected_types: tuple[str, ...] = ()
+    if isinstance(expected_type, str):
+        expected_types = (expected_type,)
+    elif (
+        isinstance(expected_type, list)
+        and len(expected_type) == 2
+        and all(isinstance(item, str) for item in expected_type)
+        and len(set(expected_type)) == 2
+        and "null" in expected_type
+    ):
+        expected_types = tuple(expected_type)
+    elif expected_type is not None:
+        return [
+            f"{path}: schema type must be one type or a nullable two-type array"
+        ]
+    if expected_types and not any(
+        _json_type_matches(value, candidate)
+        for candidate in expected_types
+    ):
+        expected_label = (
+            expected_types[0]
+            if len(expected_types) == 1
+            else "one of " + ", ".join(expected_types)
+        )
+        return [f"{path}: expected {expected_label}"]
     if "enum" in schema and value not in schema.get("enum", []):
         errors.append(f"{path}: value is outside enum")
     if "const" in schema and value != schema.get("const"):
@@ -322,6 +373,68 @@ def _goal_conditional_capability_ids(
             if isinstance(capability_id, str) and capability_id in optional_ids:
                 conditional_ids.add(capability_id)
     return conditional_ids
+
+
+def target_requiredness_handoffs_are_optional(
+    contract: dict[str, Any],
+    target_capability_id: str,
+    target_input: dict[str, Any],
+) -> bool:
+    """Return whether every upstream source is an observed optional handoff."""
+
+    input_name = target_input.get("name")
+    upstream_strategies = [
+        strategy
+        for strategy in target_input.get("sourceStrategies", [])
+        if isinstance(strategy, dict)
+        and strategy.get("kind") == "upstream-tool"
+    ]
+    if not isinstance(input_name, str) or not upstream_strategies:
+        return False
+    graph = contract.get("capabilityGraph")
+    graph_edges_value = graph.get("edges", []) if isinstance(graph, dict) else []
+    graph_edges = [
+        edge
+        for edge in graph_edges_value
+        if isinstance(edge, dict)
+    ] if isinstance(graph_edges_value, list) else []
+    handoffs_value = contract.get("handoffs", [])
+    handoffs = [
+        handoff
+        for handoff in handoffs_value
+        if isinstance(handoff, dict)
+    ] if isinstance(handoffs_value, list) else []
+    for strategy in upstream_strategies:
+        source_id = strategy.get("capabilityId")
+        matching_handoffs = [
+            handoff
+            for handoff in handoffs
+            if handoff.get("fromCapabilityId") == source_id
+            and handoff.get("toCapabilityId") == target_capability_id
+            and any(
+                isinstance(mapping, dict)
+                and mapping.get("sourcePath") == strategy.get("outputPath")
+                and mapping.get("targetInput") == input_name
+                and mapping.get("mappingKind") == strategy.get("mappingKind")
+                for mapping in handoff.get("mappings", [])
+            )
+        ]
+        matching_edges = [
+            edge
+            for edge in graph_edges
+            if edge.get("fromCapabilityId") == source_id
+            and edge.get("toCapabilityId") == target_capability_id
+            and edge.get("composition") == "observed"
+        ]
+        if (
+            len(matching_handoffs) != 1
+            or matching_handoffs[0].get("required") is not False
+            or len(matching_edges) != 1
+            or matching_edges[0].get("required") is not False
+            or matching_edges[0].get("kind") == "hard-precondition"
+        ):
+            return False
+    return True
 
 
 def validate_source_topology(topology: dict[str, Any]) -> set[str]:
@@ -542,6 +655,10 @@ def validate_canonical_contract(contract: dict[str, Any], source_ids: set[str]) 
         missing_evidence = _string_list(item.get("missingEvidence", []), f"capability {capability_id}.missingEvidence")
         if item.get("readiness") == "ready" and missing_evidence:
             raise ContractError(f"capability {capability_id} cannot be ready while evidence is missing")
+        if item.get("readiness") == "requires-review" and not missing_evidence:
+            raise ContractError(
+                f"capability {capability_id} must name the missing evidence that requires review"
+            )
         implementation = _object(
             item.get("implementation"),
             f"capability {capability_id}.implementation",
@@ -683,6 +800,10 @@ def validate_canonical_contract(contract: dict[str, Any], source_ids: set[str]) 
                     f"ready capability {capability_id}.runtimeProtection must use fact-level evidence"
                 )
             if mode == "unresolved":
+                if "hardWorkflowEvidence" in protection:
+                    raise ContractError(
+                        f"unresolved capability {capability_id} must not declare hardWorkflowEvidence"
+                    )
                 if item.get("readiness") not in {"requires-review", "blocked"}:
                     raise ContractError(
                         f"unresolved capability {capability_id} must be requires-review or blocked"
@@ -696,6 +817,10 @@ def validate_canonical_contract(contract: dict[str, Any], source_ids: set[str]) 
                         f"unresolved capability {capability_id} must not guess an owner or workflowId"
                     )
             elif mode == "backend-authoritative":
+                if "hardWorkflowEvidence" in protection:
+                    raise ContractError(
+                        f"backend-authoritative capability {capability_id} must not declare hardWorkflowEvidence"
+                    )
                 if protection.get("owner") != "target-api":
                     raise ContractError(
                         f"capability {capability_id}.runtimeProtection.owner must equal target-api"
@@ -717,11 +842,162 @@ def validate_canonical_contract(contract: dict[str, Any], source_ids: set[str]) 
                     raise ContractError(
                         f"capability {capability_id}.workflowId must match runtimeProtection.workflowId"
                     )
+                hard_evidence = _object(
+                    protection.get("hardWorkflowEvidence"),
+                    f"capability {capability_id}.runtimeProtection.hardWorkflowEvidence",
+                )
+                if set(hard_evidence) != HARD_WORKFLOW_EVIDENCE_CATEGORIES:
+                    raise ContractError(
+                        f"capability {capability_id}.runtimeProtection.hardWorkflowEvidence "
+                        "must contain exactly protectedValueIssuance, protectedValueBinding, "
+                        "and preDispatchEnforcement"
+                    )
+                for category in sorted(HARD_WORKFLOW_EVIDENCE_CATEGORIES):
+                    category_refs = _string_list(
+                        hard_evidence.get(category),
+                        f"capability {capability_id}.runtimeProtection."
+                        f"hardWorkflowEvidence.{category}",
+                    )
+                    if not category_refs:
+                        raise ContractError(
+                            f"capability {capability_id}.runtimeProtection."
+                            f"hardWorkflowEvidence.{category} must not be empty"
+                        )
+                    if not set(category_refs) <= set(protection_refs):
+                        raise ContractError(
+                            f"capability {capability_id}.runtimeProtection."
+                            f"hardWorkflowEvidence.{category} must be retained in evidenceRefs"
+                        )
+                    if any(
+                        evidence_by_id.get(ref, {}).get("assertionLevel") != "fact"
+                        for ref in category_refs
+                    ):
+                        raise ContractError(
+                            f"capability {capability_id}.runtimeProtection."
+                            f"hardWorkflowEvidence.{category} must use fact-level evidence"
+                        )
         for input_index, input_value in enumerate(_list(item.get("inputs"), f"capability {capability_id}.inputs")):
             input_item = _object(input_value, f"capability {capability_id}.inputs[{input_index}]")
             _string(input_item.get("name"), f"capability {capability_id}.inputs[{input_index}].name")
             if not isinstance(input_item.get("required"), bool):
                 raise ContractError(f"capability {capability_id}.inputs[{input_index}].required must be boolean")
+            upstream_strategies = [
+                strategy
+                for strategy in input_item.get("sourceStrategies", [])
+                if isinstance(strategy, dict)
+                and strategy.get("kind") == "upstream-tool"
+            ]
+            needs_target_requiredness = (
+                input_item.get("required") is False
+                and not input_item.get("requiredWhen")
+                and bool(upstream_strategies)
+            )
+            target_requiredness = input_item.get("targetRequiredness")
+            requiredness_location = (
+                f"capability {capability_id}.inputs[{input_index}].targetRequiredness"
+            )
+            if needs_target_requiredness:
+                if not target_requiredness_handoffs_are_optional(
+                    contract,
+                    capability_id,
+                    input_item,
+                ):
+                    raise ContractError(
+                        f"{requiredness_location} requires every matching Canonical handoff and observed graph edge to be optional and non-hard"
+                    )
+                target_requiredness = _object(
+                    target_requiredness,
+                    requiredness_location,
+                )
+                status = target_requiredness.get("status")
+                if status not in {"proven-optional", "unproven"}:
+                    raise ContractError(
+                        f"{requiredness_location}.status must be proven-optional or unproven"
+                    )
+                expected_fields = (
+                    {"status", "evidenceRefs"}
+                    if status == "proven-optional"
+                    else {"status", "normalProvider", "evidenceRefs"}
+                )
+                if set(target_requiredness) != expected_fields:
+                    raise ContractError(
+                        f"{requiredness_location} must contain exactly "
+                        + ", ".join(sorted(expected_fields))
+                    )
+                requiredness_refs = _string_list(
+                    target_requiredness.get("evidenceRefs"),
+                    f"{requiredness_location}.evidenceRefs",
+                )
+                if not requiredness_refs:
+                    raise ContractError(
+                        f"{requiredness_location}.evidenceRefs must not be empty"
+                    )
+                if any(ref not in evidence_ids for ref in requiredness_refs):
+                    raise ContractError(
+                        f"{requiredness_location}.evidenceRefs references unknown evidence"
+                    )
+                if any(
+                    evidence_by_id.get(ref, {}).get("assertionLevel") != "fact"
+                    for ref in requiredness_refs
+                ):
+                    raise ContractError(
+                        f"{requiredness_location}.evidenceRefs must prove the decision or observed normal provider with fact-level evidence"
+                    )
+                if any(
+                    evidence_by_id.get(ref, {}).get("semanticRole")
+                    not in TARGET_REQUIREDNESS_EVIDENCE_ROLES[status]
+                    for ref in requiredness_refs
+                ):
+                    raise ContractError(
+                        f"{requiredness_location}.evidenceRefs uses evidence that cannot prove its target requiredness status"
+                    )
+                input_evidence_refs = {
+                    ref
+                    for ref in input_item.get("evidenceRefs", [])
+                    if isinstance(ref, str)
+                }
+                if not set(requiredness_refs) <= input_evidence_refs:
+                    raise ContractError(
+                        f"{requiredness_location}.evidenceRefs must be retained on this exact input"
+                    )
+                if status == "unproven":
+                    if not any(
+                        evidence_by_id.get(ref, {}).get("semanticRole")
+                        in OBSERVED_NORMAL_PROVIDER_EVIDENCE_ROLES
+                        and evidence_by_id.get(ref, {}).get("sourceId")
+                        in set(primary_source_ids)
+                        for ref in requiredness_refs
+                    ):
+                        raise ContractError(
+                            f"{requiredness_location}.evidenceRefs must include request/call or behavior-test evidence from the feature boundary's primary source for the observed normal provider; supplementary backend evidence or a transport contract alone is insufficient"
+                        )
+                    normal_provider = _object(
+                        target_requiredness.get("normalProvider"),
+                        f"{requiredness_location}.normalProvider",
+                    )
+                    if set(normal_provider) != {
+                        "capabilityId",
+                        "outputPath",
+                        "mappingKind",
+                    }:
+                        raise ContractError(
+                            f"{requiredness_location}.normalProvider must contain exactly capabilityId, outputPath, and mappingKind"
+                        )
+                    if normal_provider not in [
+                        {
+                            "capabilityId": strategy.get("capabilityId"),
+                            "outputPath": strategy.get("outputPath"),
+                            "mappingKind": strategy.get("mappingKind"),
+                        }
+                        for strategy in upstream_strategies
+                    ]:
+                        raise ContractError(
+                            f"{requiredness_location}.normalProvider must exactly match one upstream-tool source strategy"
+                        )
+            elif target_requiredness is not None:
+                raise ContractError(
+                    f"{requiredness_location} is only valid for an unconditionally optional input with an observed upstream Tool provider"
+                )
             value_domain = _object(
                 input_item.get("valueDomain", {"kind": "unconstrained"}),
                 f"capability {capability_id}.inputs[{input_index}].valueDomain",
@@ -990,7 +1266,12 @@ def _output_schema_from_contract(outputs: list[dict[str, Any]]) -> dict[str, Any
         for index, segment in enumerate(path):
             last = index == len(path) - 1
             if segment == "*":
-                current["type"] = "array"
+                current_type = current.get("type")
+                if not (
+                    isinstance(current_type, list)
+                    and "array" in current_type
+                ):
+                    current["type"] = "array"
                 current.pop("additionalProperties", None)
                 current.pop("properties", None)
                 current.pop("required", None)
@@ -1871,8 +2152,15 @@ def write_evidence_complete(
         if not isinstance(boundary, dict) or not isinstance(catalog, list):
             return False
         if boundary.get("primaryEvidenceRole") == "client-feature":
-            authoritative_sources = set(boundary.get("supplementarySourceIds", []))
+            client_sources = set(boundary.get("clientSourceIds", []))
+            supplementary_sources = set(boundary.get("supplementarySourceIds", []))
+            authoritative_sources = (
+                client_sources | supplementary_sources
+                if capability.get("sideEffect") == "read"
+                else supplementary_sources
+            )
         else:
+            client_sources = set()
             authoritative_sources = set(boundary.get("serviceSourceIds", [])) | set(
                 boundary.get("supplementarySourceIds", [])
             )
@@ -1894,18 +2182,46 @@ def write_evidence_complete(
             for ref in value
             if isinstance(ref, str)
         }
+        primary_exposure_refs = {
+            ref
+            for ref in capability.get("exposure", {}).get("evidenceRefs", [])
+            if isinstance(ref, str)
+        }
         for category in required_categories:
             refs = coverage[category].get("evidenceRefs", [])
             if not isinstance(refs, list) or not refs:
                 return False
             for ref in refs:
                 evidence = evidence_by_id.get(ref)
+                allowed_roles = set(WRITE_EVIDENCE_ROLES[category])
+                if (
+                    category == "sideEffect"
+                    and capability.get("sideEffect") == "read"
+                    and isinstance(evidence, dict)
+                    and evidence.get("sourceId") in client_sources
+                ):
+                    allowed_roles.update({
+                        "client-api-call",
+                        "client-local-behavior",
+                        "request-construction",
+                    })
+                client_read_evidence = (
+                    category == "sideEffect"
+                    and capability.get("sideEffect") == "read"
+                    and isinstance(evidence, dict)
+                    and evidence.get("sourceId") in client_sources
+                )
+                operation_bound = (
+                    ref in primary_exposure_refs
+                    if client_read_evidence
+                    else ref in operation_refs
+                )
                 if (
                     not isinstance(evidence, dict)
-                    or ref not in operation_refs
+                    or not operation_bound
                     or evidence.get("assertionLevel") != "fact"
                     or evidence.get("sourceId") not in authoritative_sources
-                    or evidence.get("semanticRole") not in WRITE_EVIDENCE_ROLES[category]
+                    or evidence.get("semanticRole") not in allowed_roles
                 ):
                     return False
     return True
@@ -1947,6 +2263,13 @@ def required_capability_verification_checks(
         for item in capability.get("inputs", [])
     ):
         behavior_ids.add("conditional-rules-cover-active-and-inactive-branches")
+    if any(
+        isinstance(item, dict)
+        and isinstance(item.get("targetRequiredness"), dict)
+        and item["targetRequiredness"].get("status") == "unproven"
+        for item in capability.get("inputs", [])
+    ):
+        behavior_ids.add("optional-upstream-omission-preserves-target-api-decision")
     attachments = capability.get("attachments", {})
     if isinstance(attachments, dict) and attachments.get("mode") == "host-approved-reference":
         behavior_ids.add("attachment-resolution-failure-zero-dispatch")
@@ -2014,10 +2337,122 @@ def capability_verification_checks(
     return result
 
 
+def derive_capability_review_items(
+    contract: dict[str, Any],
+    compatibility: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """Project actionable uncertainty without creating another fact source."""
+
+    capabilities = [
+        item for item in contract.get("capabilities", []) if isinstance(item, dict)
+    ]
+    result: dict[str, list[dict[str, Any]]] = {
+        item["capabilityId"]: []
+        for item in capabilities
+        if isinstance(item.get("capabilityId"), str)
+    }
+    for capability_index, capability in enumerate(capabilities):
+        capability_id = capability.get("capabilityId")
+        if capability_id not in result:
+            continue
+        for evidence_index, detail in enumerate(capability.get("missingEvidence", [])):
+            if not isinstance(detail, str) or not detail:
+                continue
+            result[capability_id].append({
+                "issueRef": (
+                    "canonical-contract.json#/capabilities/"
+                    f"{capability_index}/missingEvidence/{evidence_index}"
+                ),
+                "kind": "missing-evidence",
+                "detail": detail,
+                "currentDisposition": capability.get("readiness"),
+                "recommendedAction": "provide-evidence-and-run-controlled-test",
+            })
+        for input_index, input_item in enumerate(capability.get("inputs", [])):
+            if not isinstance(input_item, dict):
+                continue
+            target_requiredness = input_item.get("targetRequiredness")
+            if (
+                not isinstance(target_requiredness, dict)
+                or target_requiredness.get("status") != "unproven"
+            ):
+                continue
+            normal_provider = target_requiredness.get("normalProvider", {})
+            result[capability_id].append({
+                "issueRef": (
+                    "canonical-contract.json#/capabilities/"
+                    f"{capability_index}/inputs/{input_index}/targetRequiredness"
+                ),
+                "kind": "target-requiredness-unproven",
+                "inputName": input_item.get("name"),
+                "providerCapabilityId": (
+                    normal_provider.get("capabilityId")
+                    if isinstance(normal_provider, dict)
+                    else None
+                ),
+                "currentDisposition": capability.get("readiness"),
+                "recommendedAction": "provide-evidence-and-run-controlled-test",
+            })
+
+    for conflict_index, conflict in enumerate(contract.get("conflicts", [])):
+        if not isinstance(conflict, dict) or conflict.get("status") != "unresolved":
+            continue
+        for capability_id in conflict.get("affectedCapabilityIds", []):
+            if capability_id not in result:
+                continue
+            item: dict[str, Any] = {
+                "issueRef": f"canonical-contract.json#/conflicts/{conflict_index}",
+                "kind": "unresolved-conflict",
+                "conflictId": conflict.get("conflictId"),
+                "currentDisposition": next(
+                    (
+                        capability.get("readiness")
+                        for capability in capabilities
+                        if capability.get("capabilityId") == capability_id
+                    ),
+                    "requires-review",
+                ),
+                "recommendedAction": "resolve-conflict-and-run-controlled-test",
+            }
+            if isinstance(conflict.get("claim"), str) and conflict["claim"]:
+                item["claim"] = conflict["claim"]
+            result[capability_id].append(item)
+
+    for assessment_index, assessment in enumerate(
+        compatibility.get("capabilityAssessments", [])
+    ):
+        if not isinstance(assessment, dict):
+            continue
+        capability_id = assessment.get("capabilityId")
+        if capability_id not in result:
+            continue
+        compatibility_status = assessment.get("status")
+        for field, kind in (
+            ("missingRequirementIds", "missing-host-requirement"),
+            ("externalIntegrationRequirementIds", "external-host-integration"),
+        ):
+            for requirement_index, requirement_id in enumerate(assessment.get(field, [])):
+                if not isinstance(requirement_id, str) or not requirement_id:
+                    continue
+                result[capability_id].append({
+                    "issueRef": (
+                        "host-compatibility-report.json#/capabilityAssessments/"
+                        f"{assessment_index}/{field}/{requirement_index}"
+                    ),
+                    "kind": kind,
+                    "requirementId": requirement_id,
+                    "compatibilityStatus": compatibility_status,
+                    "currentDisposition": compatibility_status,
+                    "recommendedAction": "configure-host-requirement",
+                })
+    return result
+
+
 def derive_verification_matrix(
     contract: dict[str, Any],
     compatibility: dict[str, Any],
 ) -> dict[str, Any]:
+    review_items_by_id = derive_capability_review_items(contract, compatibility)
     compatibility_by_id = {
         item["capabilityId"]: item["status"]
         for item in compatibility.get("capabilityAssessments", [])
@@ -2060,6 +2495,7 @@ def derive_verification_matrix(
                 "blocked": blocked,
             },
             "reasons": reasons,
+            "reviewItems": review_items_by_id.get(capability_id, []),
             "checks": capability_verification_checks(capability, contract),
         })
 

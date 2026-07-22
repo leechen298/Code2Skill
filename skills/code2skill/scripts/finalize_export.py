@@ -14,6 +14,7 @@ from typing import Any
 
 from contract_model import (
     capability_verification_checks,
+    derive_capability_review_items,
     derive_schema_contract,
     json_schema_errors,
     workflow_capability_ids,
@@ -1081,10 +1082,10 @@ def _initial_matrix_by_id(root: Path) -> tuple[dict[str, dict[str, Any]], dict[s
     return capabilities, workflows
 
 
-def _host_compatibility_by_id(
+def _host_compatibility_report(
     root: Path,
     canonical: dict[str, Any] | None,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     if canonical is None:
         return {}
     path = root / "host-compatibility-report.json"
@@ -1100,7 +1101,7 @@ def _host_compatibility_by_id(
         raise FinalizationError(
             "host-compatibility-report.capabilityAssessments must be an array"
         )
-    result: dict[str, str] = {}
+    seen: set[str] = set()
     for index, assessment in enumerate(assessments):
         location = f"host-compatibility-report.capabilityAssessments[{index}]"
         if not isinstance(assessment, dict):
@@ -1109,10 +1110,10 @@ def _host_compatibility_by_id(
         status = assessment.get("status")
         if status not in {"enabled", "requires-host-integration", "disabled", "blocked"}:
             raise FinalizationError(f"{location}.status is invalid")
-        if capability_id in result:
+        if capability_id in seen:
             raise FinalizationError(f"duplicate Host compatibility assessment: {capability_id}")
-        result[capability_id] = status
-    return result
+        seen.add(capability_id)
+    return value
 
 
 def _reason(reasons: list[str], value: str) -> None:
@@ -1161,7 +1162,17 @@ def _build_matrix(
     legacy: bool,
 ) -> dict[str, Any]:
     initial_capabilities, initial_workflows = _initial_matrix_by_id(root)
-    compatibility_by_id = _host_compatibility_by_id(root, canonical)
+    compatibility = _host_compatibility_report(root, canonical)
+    compatibility_by_id = {
+        item["capabilityId"]: item["status"]
+        for item in compatibility.get("capabilityAssessments", [])
+        if isinstance(item, dict)
+    }
+    review_items_by_id = (
+        derive_capability_review_items(canonical, compatibility)
+        if canonical is not None
+        else {}
+    )
     if canonical is None:
         contract_id = str(read_json(root / "capability-bundle.json").get("recordingId"))
         canonical_capabilities = bundle_capabilities
@@ -1488,6 +1499,7 @@ def _build_matrix(
             "capabilityId": capability_id,
             "status": status,
             "reasons": reasons,
+            "reviewItems": review_items_by_id.get(capability_id, []),
             "checks": checks,
         })
 
@@ -1542,6 +1554,21 @@ def _overall_decision(matrix: dict[str, Any]) -> str:
     if "requires-review" in decisions:
         return "requires-review"
     return "blocked"
+
+
+def _capability_approval_entry(item: dict[str, Any]) -> dict[str, Any]:
+    review_items = item.get("reviewItems", [])
+    return {
+        "capabilityId": item["capabilityId"],
+        "decision": _item_decision(item["status"]),
+        "reasons": list(item.get("reasons", [])),
+        "issueRefs": [
+            review_item["issueRef"]
+            for review_item in review_items
+            if isinstance(review_item, dict)
+            and isinstance(review_item.get("issueRef"), str)
+        ],
+    }
 
 
 def main() -> int:
@@ -1658,7 +1685,7 @@ def main() -> int:
         "preflightStatus": "passed",
         "verificationMatrixRef": "verification-matrix.json",
         "capabilities": [
-            {"capabilityId": item["capabilityId"], "decision": _item_decision(item["status"])}
+            _capability_approval_entry(item)
             for item in matrix["capabilities"]
         ],
         "workflows": [

@@ -502,7 +502,12 @@
       "runtimeProtection": {
         "mode": "deterministic-workflow",
         "workflowId": "upload-sample-attachment",
-        "evidenceRefs": ["ev-service-attachment", "ev-tests-workflow"]
+        "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment", "ev-tests-workflow"],
+        "hardWorkflowEvidence": {
+          "protectedValueIssuance": ["ev-contract-attachment"],
+          "protectedValueBinding": ["ev-contract-attachment"],
+          "preDispatchEnforcement": ["ev-tests-workflow"]
+        }
       },
       "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "trusted-confirmation", "session-state", "attachment-resolution", "unknown-outcome-reconciliation"],
       "evidenceCoverage": {
@@ -779,7 +784,7 @@
         {"name": "requestData", "description": "The exact request data previously validated.", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"subject": {"type": "string"}, "note": {"type": "string"}}, "required": ["subject"]}, "required": true, "informationClass": "required", "sourceStrategies": ["user"], "valueDomain": {"kind": "unconstrained"}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"refreshWhen": ["user-edited"]}, "evidenceRefs": ["ev-service-validation", "ev-service-submit"]},
         {"name": "validationGrant", "description": "Opaque validation grant bound to subject, session, target, and payload digest.", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "payloadDigest": {"type": "string"}}, "required": ["grantId", "payloadDigest"]}, "required": true, "informationClass": "derived", "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "validate-sample-request", "outputPath": ["validationGrant"], "mappingKind": "direct"}], "valueDomain": {"kind": "dynamic", "sourceCapabilityId": "validate-sample-request", "sourcePath": ["validationGrant"], "mappingKind": "direct", "identityScoped": true, "tenantScoped": false, "sessionScoped": true, "freshness": {"ttlSeconds": 120, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-validation", "ev-service-validation"]}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 120, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-validation", "ev-service-validation"]},
         {"name": "confirmationGrant", "description": "Single-use trusted confirmation bound to the same subject, session, target, payload digest, and validation grant.", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "validationGrantId": {"type": "string"}, "payloadDigest": {"type": "string"}}, "required": ["grantId", "validationGrantId", "payloadDigest"]}, "required": true, "informationClass": "derived", "sourceStrategies": [{"kind": "trusted-host-context", "requirementId": "trusted-confirmation"}], "valueDomain": {"kind": "unconstrained"}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 60, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-tests-workflow"]},
-        {"name": "attachmentGrants", "description": "Source-proven uploaded attachment results bound into validation and final submission when present.", "type": "array", "schema": {"type": "array", "items": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "uploadResult": {"type": "string"}}, "required": ["grantId", "uploadResult"]}}, "required": false, "informationClass": "optional", "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array"}], "valueDomain": {"kind": "dynamic", "sourceCapabilityId": "upload-sample-attachment", "sourcePath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array", "identityScoped": true, "tenantScoped": false, "sessionScoped": true, "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment"]}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 300, "refreshWhen": ["session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-service-attachment", "ev-service-submit"]}
+        {"name": "attachmentGrants", "description": "Source-proven uploaded attachment results bound into validation and final submission when present.", "type": "array", "schema": {"type": "array", "items": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "uploadResult": {"type": "string"}}, "required": ["grantId", "uploadResult"]}}, "required": false, "informationClass": "optional", "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array"}], "targetRequiredness": {"status": "proven-optional", "evidenceRefs": ["ev-contract-submit"]}, "valueDomain": {"kind": "dynamic", "sourceCapabilityId": "upload-sample-attachment", "sourcePath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array", "identityScoped": true, "tenantScoped": false, "sessionScoped": true, "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment"]}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 300, "refreshWhen": ["session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-submit", "ev-service-attachment", "ev-service-submit"]}
       ],
       "outputs": [
         {"path": ["requestId"], "type": "string", "description": "Stable identifier returned only after a confirmed dispatch result.", "valueDomain": {"kind": "unconstrained"}, "evidenceRefs": ["ev-contract-submit", "ev-service-submit"]}
@@ -838,7 +843,12 @@
       "runtimeProtection": {
         "mode": "deterministic-workflow",
         "workflowId": "submit-sample-request",
-        "evidenceRefs": ["ev-service-submit", "ev-tests-workflow"]
+        "evidenceRefs": ["ev-contract-validation", "ev-contract-submit", "ev-service-validation", "ev-service-submit", "ev-tests-workflow"],
+        "hardWorkflowEvidence": {
+          "protectedValueIssuance": ["ev-contract-validation"],
+          "protectedValueBinding": ["ev-contract-submit"],
+          "preDispatchEnforcement": ["ev-service-validation", "ev-tests-workflow"]
+        }
       },
       "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "trusted-confirmation", "session-state", "unknown-outcome-reconciliation"],
       "evidenceCoverage": {

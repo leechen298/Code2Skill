@@ -27,6 +27,7 @@ For every Tool:
 - authorization and tenant rejection when applicable;
 - upstream failure and stable error mapping;
 - backend business rejection with structured category/code/message/field details when available, proving the Agent can correct information without treating MCP as broken;
+- for an optional upstream-provided input whose `targetRequiredness.status` is `unproven`, one controlled omission vector proving the Function does not promote the value to a local hard requirement and preserves the target API's structured acceptance or rejection decision;
 - for writes, a response-proven rejection marked with trusted `outcomeKnown: true`, preserving its actionable code but remaining non-retryable, plus a timeout/reset/disconnect or unmarked failure that becomes non-retryable `UNKNOWN_DISPATCH_OUTCOME`;
 - output contract validation.
 
@@ -78,6 +79,8 @@ It verifies MCP initialize, exact Tool discovery, the unknown-Tool protocol erro
 - `host-verified`;
 - `requires-review`;
 - `blocked`.
+
+The matrix must also retain deterministic, human-readable `reviewItems` derived from Canonical `missingEvidence`, unproven input `targetRequiredness`, unresolved conflicts, and Host compatibility restrictions. Each item has a stable `issueRef` back to the exact Canonical or compatibility field; copied input/provider, detail, claim, requirement ID, and compatibility status are mechanical projections of that field. `currentDisposition` is copied from Canonical readiness or Host compatibility, while `recommendedAction` uses a closed generic action (`provide-evidence-and-run-controlled-test`, `resolve-conflict-and-run-controlled-test`, or `configure-host-requirement`) rather than guessed project advice. Do not hand-author another warning list. Finalization re-derives these items while updating verification state, and `approval-audit.json` carries each Capability's exact matrix `reasons` and `issueRefs`. A Capability with no concrete uncertainty has empty arrays. Unproven ordinary target requiredness may remain usable while its controlled-test question stays visible; missing safety evidence can still require review. A fabricated type, upload chain, or Guard is a generation defect and cannot be made acceptable merely by adding a warning.
 
 Do not copy a successful live receipt across rows. A read-only call proves nothing about an unexecuted calculation, upload, validation, or write capability. If a real write test is unsafe or unavailable, retain `requires-review`; another Tool's success cannot approve it.
 

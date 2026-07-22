@@ -29,6 +29,7 @@ from contract_model import (  # noqa: E402
     derive_host_compatibility,
     derive_verification_matrix,
     evaluate_goal_state,
+    json_schema_errors,
     validate_canonical_contract,
     validate_source_topology,
     write_evidence_complete,
@@ -532,6 +533,142 @@ console.log('portable error normalizer vector passed');
             {"grantId", "requiresAttachment", "allowsAttachment"},
         )
 
+    def test_nullable_output_schema_preserves_both_source_proven_value_types(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            catalog = next(
+                item for item in contract["capabilities"]
+                if item["capabilityId"] == "list-sample-request-kinds"
+            )
+            options = next(
+                item for item in catalog["outputs"]
+                if item["path"] == ["options"]
+            )
+            options["schema"]["type"] = ["array", "null"]
+            options["schema"]["items"]["properties"]["hint"] = {
+                "type": ["string", "null"],
+            }
+            options["schema"]["items"]["required"].append("hint")
+
+            fixture.save_contract_and_derive(contract)
+            schema_contract = read_json(
+                fixture.candidate / "mcp-tool" / "schema-contract.json"
+            )
+            catalog_schema = next(
+                item for item in schema_contract["capabilities"]
+                if item["capabilityId"] == "list-sample-request-kinds"
+            )["outputSchema"]
+            options_schema = (
+                catalog_schema["properties"]["data"]["properties"]["options"]
+            )
+            hint_schema = options_schema["items"]["properties"]["hint"]
+
+        self.assertEqual(options_schema["type"], ["array", "null"])
+        self.assertEqual(hint_schema["type"], ["string", "null"])
+        self.assertEqual(
+            json_schema_errors(
+                {"status": 200, "data": {"options": None}},
+                catalog_schema,
+            ),
+            [],
+        )
+        self.assertEqual(
+            json_schema_errors(
+                {
+                    "status": 200,
+                    "data": {
+                        "options": [{
+                            "label": "synthetic",
+                            "selectionGrant": {
+                                "grantId": "grant",
+                                "requiresAttachment": False,
+                                "allowsAttachment": False,
+                            },
+                            "hint": None,
+                        }],
+                    },
+                },
+                catalog_schema,
+            ),
+            [],
+        )
+        self.assertEqual(
+            json_schema_errors(
+                {
+                    "status": 200,
+                    "data": {
+                        "options": [{
+                            "label": "synthetic",
+                            "selectionGrant": {
+                                "grantId": "grant",
+                                "requiresAttachment": False,
+                                "allowsAttachment": False,
+                            },
+                            "hint": "source-proven guidance",
+                        }],
+                    },
+                },
+                catalog_schema,
+            ),
+            [],
+        )
+        errors = json_schema_errors(
+            {
+                "status": 200,
+                "data": {
+                    "options": [{
+                        "label": "synthetic",
+                        "selectionGrant": {
+                            "grantId": "grant",
+                            "requiresAttachment": False,
+                            "allowsAttachment": False,
+                        },
+                        "hint": 42,
+                    }],
+                },
+            },
+            catalog_schema,
+        )
+        self.assertTrue(any("expected one of string, null" in item for item in errors), errors)
+
+    def test_output_schema_rejects_invalid_or_mismatched_type_unions(self) -> None:
+        mutations = {
+            "unknown type": ["string", "synthetic-unknown"],
+            "duplicate type": ["string", "string"],
+            "single type union": ["string"],
+            "non-null union": ["string", "number"],
+        }
+        for label, schema_types in mutations.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                fixture = SyntheticVNextFixture(Path(directory))
+                contract = copy.deepcopy(fixture.contract)
+                output = next(
+                    item for item in contract["capabilities"][0]["outputs"]
+                    if item["path"] == ["options"]
+                )
+                output["schema"]["type"] = schema_types
+
+                errors = self.derive_or_validate(fixture, contract)
+
+            self.assert_diagnostic_contains(
+                errors,
+                ("nullable union", "nullable unions", "nullable two-type"),
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            output = next(
+                item for item in contract["capabilities"][0]["outputs"]
+                if item["path"] == ["options"]
+            )
+            output["schema"]["type"] = ["object", "null"]
+
+            errors = self.derive_or_validate(fixture, contract)
+
+        self.assert_diagnostic_contains(errors, ("include the declared output type",))
+
     def test_nested_output_declaration_must_agree_with_parent_schema(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = SyntheticVNextFixture(Path(directory))
@@ -642,6 +779,7 @@ console.log('portable error normalizer vector passed');
                 )
                 if kind == "user-source":
                     attachment_input["sourceStrategies"] = ["user"]
+                    attachment_input.pop("targetRequiredness")
                 elif kind == "missing-consumer-binding":
                     submit["attachments"]["consumerBindings"] = []
                 elif kind == "missing-runtime-binding":
@@ -694,6 +832,385 @@ console.log('portable error normalizer vector passed');
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(fixture.validate(), [])
 
+    def test_client_visible_read_side_effect_evidence_passes_the_full_validator(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            capability = next(
+                item
+                for item in contract["capabilities"]
+                if item["sideEffect"] == "read"
+            )
+            client_invocation = capability["exposure"]["evidenceRefs"][0]
+            capability["evidenceCoverage"]["sideEffect"] = {
+                "declaredSideEffect": "read",
+                "assertionLevel": "fact",
+                "evidenceRefs": [client_invocation],
+            }
+
+            fixture.save_contract_and_derive(contract)
+            errors = fixture.validate()
+
+        self.assertEqual(errors, [])
+
+    def test_backend_internal_maintenance_does_not_reclassify_a_client_read(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            capability = next(
+                item
+                for item in contract["capabilities"]
+                if item["sideEffect"] == "read"
+            )
+            client_invocation = capability["exposure"]["evidenceRefs"][0]
+            hidden_maintenance_ref = "ev-service-hidden-maintenance"
+            contract["evidenceCatalog"].append({
+                "evidenceId": hidden_maintenance_ref,
+                "sourceId": "sample-service",
+                "locator": "src/internal/catalog-maintenance.py#refresh",
+                "semanticRole": "side-effect",
+                "assertionLevel": "fact",
+            })
+            hidden_evidence_path = (
+                fixture.source_roots["sample-service"]
+                / "src/internal/catalog-maintenance.py"
+            )
+            hidden_evidence_path.parent.mkdir(parents=True, exist_ok=True)
+            hidden_evidence_path.write_text(
+                "synthetic hidden maintenance evidence\n",
+                encoding="utf-8",
+            )
+            capability["exposure"]["supplementalEvidenceRefs"].append(
+                hidden_maintenance_ref
+            )
+            capability["evidenceRefs"].append(hidden_maintenance_ref)
+            capability["evidenceCoverage"]["sideEffect"] = {
+                "declaredSideEffect": "read",
+                "assertionLevel": "fact",
+                "evidenceRefs": [client_invocation],
+            }
+
+            fixture.save_contract_and_derive(contract)
+            errors = fixture.validate()
+
+        self.assertEqual(errors, [])
+
+    def test_optional_observed_upstream_value_must_classify_target_requiredness(self) -> None:
+        for information_class in ("optional", "derived"):
+            with self.subTest(information_class=information_class), tempfile.TemporaryDirectory() as directory:
+                fixture = SyntheticVNextFixture(Path(directory))
+                contract = copy.deepcopy(fixture.contract)
+                submit = next(
+                    item for item in contract["capabilities"]
+                    if item["capabilityId"] == "submit-sample-request"
+                )
+                optional_input = next(
+                    item for item in submit["inputs"]
+                    if item["name"] == "attachmentGrants"
+                )
+                optional_input["informationClass"] = information_class
+                optional_input.pop("targetRequiredness")
+                errors = self.derive_or_validate(fixture, contract)
+
+            self.assert_diagnostic_contains(
+                errors,
+                ("targetrequiredness",),
+                ("must be an object", "proven-optional", "unproven", "distinguish"),
+            )
+
+    def test_unproven_target_requiredness_binds_provider_and_surfaces_review(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            submit = next(
+                item for item in contract["capabilities"]
+                if item["capabilityId"] == "submit-sample-request"
+            )
+            optional_input = next(
+                item for item in submit["inputs"]
+                if item["name"] == "attachmentGrants"
+            )
+            optional_input["targetRequiredness"] = {
+                "status": "unproven",
+                "normalProvider": {
+                    "capabilityId": "upload-sample-attachment",
+                    "outputPath": ["uploadedAttachmentGrant"],
+                    "mappingKind": "append-to-array",
+                },
+                "evidenceRefs": [
+                    "ev-client-upload-call",
+                    "ev-client-submit-request",
+                ],
+            }
+            optional_input["evidenceRefs"].extend([
+                "ev-client-upload-call",
+                "ev-client-submit-request",
+            ])
+
+            fixture.save_contract_and_derive(contract)
+            errors = fixture.validate()
+            matrix = read_json(fixture.candidate / "verification-matrix.json")
+
+        self.assertEqual(errors, [])
+        submit_row = next(
+            item for item in matrix["capabilities"]
+            if item["capabilityId"] == "submit-sample-request"
+        )
+        self.assertTrue(
+            any(
+                item.get("kind") == "target-requiredness-unproven"
+                and item.get("inputName") == "attachmentGrants"
+                and item.get("providerCapabilityId") == "upload-sample-attachment"
+                for item in submit_row["reviewItems"]
+            ),
+            submit_row,
+        )
+        self.assertIn(
+            "optional-upstream-omission-preserves-target-api-decision",
+            {
+                item["checkId"] if isinstance(item, dict) else item
+                for item in submit_row["checks"]
+            },
+        )
+
+    def test_unproven_target_requiredness_provider_must_match_source_strategy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            submit = next(
+                item for item in contract["capabilities"]
+                if item["capabilityId"] == "submit-sample-request"
+            )
+            optional_input = next(
+                item for item in submit["inputs"]
+                if item["name"] == "attachmentGrants"
+            )
+            optional_input["targetRequiredness"] = {
+                "status": "unproven",
+                "normalProvider": {
+                    "capabilityId": "upload-sample-attachment",
+                    "outputPath": ["wrongOutput"],
+                    "mappingKind": "append-to-array",
+                },
+                "evidenceRefs": [
+                    "ev-client-upload-call",
+                    "ev-client-submit-request",
+                ],
+            }
+            optional_input["evidenceRefs"].extend([
+                "ev-client-upload-call",
+                "ev-client-submit-request",
+            ])
+            errors = self.derive_or_validate(fixture, contract)
+
+        self.assert_diagnostic_contains(
+            errors,
+            ("normalprovider",),
+            ("exactly match", "upstream-tool"),
+        )
+
+    def test_target_requiredness_cannot_borrow_neighboring_contract_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            submit = next(
+                item for item in contract["capabilities"]
+                if item["capabilityId"] == "submit-sample-request"
+            )
+            optional_input = next(
+                item for item in submit["inputs"]
+                if item["name"] == "attachmentGrants"
+            )
+            optional_input["targetRequiredness"] = {
+                "status": "unproven",
+                "normalProvider": {
+                    "capabilityId": "upload-sample-attachment",
+                    "outputPath": ["uploadedAttachmentGrant"],
+                    "mappingKind": "append-to-array",
+                },
+                "evidenceRefs": ["ev-contract-catalog"],
+            }
+            errors = self.derive_or_validate(fixture, contract)
+
+        self.assert_diagnostic_contains(
+            errors,
+            ("targetrequiredness",),
+            ("retained on this exact input",),
+        )
+
+    def test_transport_contract_alone_cannot_prove_an_observed_normal_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            submit = next(
+                item for item in contract["capabilities"]
+                if item["capabilityId"] == "submit-sample-request"
+            )
+            optional_input = next(
+                item for item in submit["inputs"]
+                if item["name"] == "attachmentGrants"
+            )
+            optional_input["targetRequiredness"] = {
+                "status": "unproven",
+                "normalProvider": {
+                    "capabilityId": "upload-sample-attachment",
+                    "outputPath": ["uploadedAttachmentGrant"],
+                    "mappingKind": "append-to-array",
+                },
+                "evidenceRefs": ["ev-contract-attachment"],
+            }
+            optional_input["evidenceRefs"].append("ev-contract-attachment")
+            errors = self.derive_or_validate(fixture, contract)
+
+        self.assert_diagnostic_contains(
+            errors,
+            ("transport contract alone is insufficient", "observed normal provider"),
+        )
+
+    def test_supplementary_backend_request_evidence_cannot_prove_the_normal_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            backend_evidence = next(
+                item for item in contract["evidenceCatalog"]
+                if item["evidenceId"] == "ev-service-attachment"
+            )
+            backend_evidence["semanticRole"] = "request-construction"
+            submit = next(
+                item for item in contract["capabilities"]
+                if item["capabilityId"] == "submit-sample-request"
+            )
+            optional_input = next(
+                item for item in submit["inputs"]
+                if item["name"] == "attachmentGrants"
+            )
+            optional_input["targetRequiredness"] = {
+                "status": "unproven",
+                "normalProvider": {
+                    "capabilityId": "upload-sample-attachment",
+                    "outputPath": ["uploadedAttachmentGrant"],
+                    "mappingKind": "append-to-array",
+                },
+                "evidenceRefs": ["ev-service-attachment"],
+            }
+            errors = self.derive_or_validate(fixture, contract)
+
+        self.assert_diagnostic_contains(
+            errors,
+            ("primary source", "supplementary backend evidence"),
+            ("observed normal provider",),
+        )
+
+    def test_target_requiredness_cannot_conflict_with_a_hard_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            handoff = next(
+                item for item in contract["handoffs"]
+                if item["fromCapabilityId"] == "upload-sample-attachment"
+                and item["toCapabilityId"] == "submit-sample-request"
+            )
+            handoff["required"] = True
+            edge = next(
+                item for item in contract["capabilityGraph"]["edges"]
+                if item["fromCapabilityId"] == "upload-sample-attachment"
+                and item["toCapabilityId"] == "submit-sample-request"
+            )
+            edge.update({"kind": "hard-precondition", "required": True})
+            errors = self.derive_or_validate(fixture, contract)
+
+        self.assert_diagnostic_contains(
+            errors,
+            ("targetrequiredness",),
+            ("optional and non-hard",),
+        )
+
+    def test_ui_confirmation_and_post_evidence_cannot_justify_a_host_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            submit = next(
+                item
+                for item in contract["capabilities"]
+                if item.get("runtimeProtection", {}).get("mode")
+                == "deterministic-workflow"
+                and item["capabilityId"] == "submit-sample-request"
+            )
+            client_post_ref = submit["exposure"]["evidenceRefs"][0]
+            submit["runtimeProtection"]["evidenceRefs"].append(client_post_ref)
+            submit["runtimeProtection"]["hardWorkflowEvidence"] = {
+                "protectedValueIssuance": [client_post_ref],
+                "protectedValueBinding": [client_post_ref],
+                "preDispatchEnforcement": [client_post_ref],
+            }
+
+            fixture.save_contract_and_derive(contract)
+            errors = fixture.validate()
+
+        for category in (
+            "protectedValueIssuance",
+            "protectedValueBinding",
+            "preDispatchEnforcement",
+        ):
+            self.assertTrue(
+                any(
+                    f"hardWorkflowEvidence.{category}" in item
+                    and "appropriate semanticRole" in item
+                    for item in errors
+                ),
+                errors,
+            )
+
+    def test_neighboring_transport_contract_cannot_justify_a_host_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            submit = next(
+                item
+                for item in contract["capabilities"]
+                if item["capabilityId"] == "submit-sample-request"
+            )
+            unrelated_contract_ref = "ev-contract-catalog"
+            submit["runtimeProtection"]["evidenceRefs"].append(
+                unrelated_contract_ref
+            )
+            submit["runtimeProtection"]["hardWorkflowEvidence"][
+                "protectedValueIssuance"
+            ] = [unrelated_contract_ref]
+            submit["runtimeProtection"]["hardWorkflowEvidence"][
+                "protectedValueBinding"
+            ] = [unrelated_contract_ref]
+
+            fixture.save_contract_and_derive(contract)
+            errors = fixture.validate()
+
+        for category in ("protectedValueIssuance", "protectedValueBinding"):
+            self.assertTrue(
+                any(
+                    f"hardWorkflowEvidence.{category}" in item
+                    and "this capability's protected input producer" in item
+                    for item in errors
+                ),
+                errors,
+            )
+
+    def test_canonical_derivation_rejects_missing_hard_workflow_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            submit = next(
+                item
+                for item in contract["capabilities"]
+                if item["capabilityId"] == "submit-sample-request"
+            )
+            submit["runtimeProtection"].pop("hardWorkflowEvidence")
+            write_json(fixture.candidate / "canonical-contract.json", contract)
+
+            result = fixture.derive()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("hardWorkflowEvidence", result.stderr)
+
     def test_frontend_observed_write_can_remain_unresolved_without_guessing_backend(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = SyntheticVNextFixture(Path(directory))
@@ -741,6 +1258,20 @@ console.log('portable error normalizer vector passed');
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("cannot be ready", result.stderr)
+
+    def test_requires_review_must_name_the_exact_missing_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            capability = contract["capabilities"][0]
+            capability["readiness"] = "requires-review"
+            capability["missingEvidence"] = []
+            write_json(fixture.candidate / "canonical-contract.json", contract)
+
+            result = fixture.derive()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must name the missing evidence", result.stderr)
 
     def test_supplemental_backend_evidence_cannot_create_client_capability(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -947,6 +1478,11 @@ console.log('portable error normalizer vector passed');
                 if input_value.get("informationClass") == "requiredWhen"
             )
             conditional_input["requiredWhen"] = []
+            conditional_input["targetRequiredness"] = {
+                "status": "proven-optional",
+                "evidenceRefs": ["ev-contract-attachment"],
+            }
+            conditional_input["evidenceRefs"].append("ev-contract-attachment")
             fixture.save_contract_and_derive(contract)
             errors = fixture.validate()
             self.assertTrue(
@@ -1096,6 +1632,7 @@ console.log('portable error normalizer vector passed');
             contract = copy.deepcopy(fixture.contract)
             reviewed = contract["capabilities"][0]
             reviewed["readiness"] = "requires-review"
+            reviewed["missingEvidence"] = ["source-defined review question"]
             host_profile = copy.deepcopy(fixture.host_profile)
             for support in host_profile["capabilities"].values():
                 support["status"] = "supported"
@@ -2293,6 +2830,27 @@ process.stdout.write(JSON.stringify(observed));
             errors,
             ("attachment-resolution", "metadata"),
             ("resolved", "must not be sent", "exactly once"),
+        )
+
+    def test_upload_authorization_without_content_transfer_is_not_a_complete_attachment_capability(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticVNextFixture(Path(directory))
+            contract = copy.deepcopy(fixture.contract)
+            upload = next(
+                item for item in contract["capabilities"]
+                if item["capabilityId"] == "upload-sample-attachment"
+            )
+            authorization_step = upload["implementation"]["steps"][0]
+            authorization_step["stepId"] = "getUploadAuthorization"
+            authorization_step["bindings"] = []
+            upload["implementation"]["outputStepId"] = "getUploadAuthorization"
+            upload["attachments"]["contentBindings"] = []
+            errors = self.derive_or_validate(fixture, contract)
+
+        self.assert_diagnostic_contains(
+            errors,
+            ("attachment-resolution", "contentbindings"),
+            ("business upload request", "resolved exactly once"),
         )
 
     def test_attachment_content_binding_must_match_the_real_upload_field(self) -> None:

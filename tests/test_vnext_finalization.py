@@ -28,7 +28,11 @@ if str(SCRIPTS_PATH) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_PATH))
 import validate_artifacts as ARTIFACT_VALIDATOR  # noqa: E402
 import validate_vnext as VNEXT_VALIDATOR  # noqa: E402
-from contract_model import operation_summary_for_capability  # noqa: E402
+from contract_model import (  # noqa: E402
+    derive_capability_review_items,
+    derive_verification_matrix,
+    operation_summary_for_capability,
+)
 
 SPEC = importlib.util.spec_from_file_location("code2skill_finalize_export", FINALIZER_PATH)
 assert SPEC is not None and SPEC.loader is not None
@@ -469,6 +473,132 @@ def install_complete_readonly_vnext(candidate: Path) -> dict[str, Any]:
 
 
 class VNextFinalizationTest(unittest.TestCase):
+    def test_review_items_are_derived_from_canonical_and_host_sources(self) -> None:
+        uncertain = capability("uncertain-read")
+        uncertain["readiness"] = "requires-review"
+        uncertain["missingEvidence"] = ["authoritative nullable response contract"]
+        stable = capability("stable-read")
+        contract = canonical([uncertain, stable])
+        contract["conflicts"] = [{
+            "conflictId": "response-shape-disagreement",
+            "claim": "Whether the response field is nullable.",
+            "status": "unresolved",
+            "affectedCapabilityIds": ["uncertain-read"],
+        }]
+        compatibility = {
+            "capabilityAssessments": [{
+                "capabilityId": "uncertain-read",
+                "status": "requires-host-integration",
+                "missingRequirementIds": ["attachment-resolution"],
+                "externalIntegrationRequirementIds": ["authentication-injection"],
+            }, {
+                "capabilityId": "stable-read",
+                "status": "enabled",
+                "missingRequirementIds": [],
+                "externalIntegrationRequirementIds": [],
+            }],
+        }
+
+        items = derive_capability_review_items(contract, compatibility)
+        self.assertEqual(
+            [item["kind"] for item in items["uncertain-read"]],
+            [
+                "missing-evidence",
+                "unresolved-conflict",
+                "missing-host-requirement",
+                "external-host-integration",
+            ],
+        )
+        self.assertEqual(items["stable-read"], [])
+        self.assertEqual(
+            [item["currentDisposition"] for item in items["uncertain-read"]],
+            [
+                "requires-review",
+                "requires-review",
+                "requires-host-integration",
+                "requires-host-integration",
+            ],
+        )
+        self.assertEqual(
+            [item["recommendedAction"] for item in items["uncertain-read"]],
+            [
+                "provide-evidence-and-run-controlled-test",
+                "resolve-conflict-and-run-controlled-test",
+                "configure-host-requirement",
+                "configure-host-requirement",
+            ],
+        )
+        matrix = derive_verification_matrix(contract, compatibility)
+        self.assertEqual(matrix["capabilities"][0]["reviewItems"], items["uncertain-read"])
+        self.assertEqual(matrix["capabilities"][1]["reviewItems"], [])
+
+        audit_entry = FINALIZER._capability_approval_entry(matrix["capabilities"][0])
+        self.assertEqual(audit_entry["reasons"], matrix["capabilities"][0]["reasons"])
+        self.assertEqual(
+            audit_entry["issueRefs"],
+            [item["issueRef"] for item in items["uncertain-read"]],
+        )
+
+    def test_final_matrix_rederives_review_items_instead_of_accepting_manual_warnings(self) -> None:
+        uncertain = capability("uncertain-read")
+        uncertain["readiness"] = "requires-review"
+        uncertain["missingEvidence"] = ["authoritative nullable response contract"]
+        contract = canonical([uncertain])
+        compatibility = {
+            "schemaVersion": "vNext",
+            "contractId": contract["contractId"],
+            "capabilityAssessments": [{
+                "capabilityId": "uncertain-read",
+                "status": "enabled",
+                "missingRequirementIds": [],
+                "externalIntegrationRequirementIds": [],
+            }],
+        }
+        report = {
+            "schemaVersion": "vNext",
+            "contractId": contract["contractId"],
+            "status": "partial",
+            "checks": [check("global")],
+            "capabilities": [capability_report("uncertain-read")],
+            "workflows": [],
+        }
+        _, _, capability_records, workflow_records = FINALIZER._read_report(
+            report, contract, contract["capabilities"]
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_json(root / "capability-bundle.json", {
+                "recordingId": "fictional-review-items",
+                "capabilities": contract["capabilities"],
+            })
+            write_json(root / "host-compatibility-report.json", compatibility)
+            initial = derive_verification_matrix(contract, compatibility)
+            initial["capabilities"][0]["reviewItems"] = [{
+                "issueRef": "manual-warning",
+                "kind": "manual",
+            }]
+            write_json(root / "verification-matrix.json", initial)
+            matrix = FINALIZER._build_matrix(
+                root,
+                contract,
+                contract["capabilities"],
+                capability_records,
+                workflow_records,
+                {"uncertain-read": {
+                    "status": "passed",
+                    "isError": False,
+                    "inputHash": evidence_hash("uncertain-read-live-input"),
+                    "resultHash": evidence_hash("uncertain-read-live-result"),
+                }},
+                legacy=False,
+            )
+
+        self.assertEqual(
+            matrix["capabilities"][0]["reviewItems"],
+            derive_capability_review_items(contract, compatibility)["uncertain-read"],
+        )
+        self.assertNotIn("manual-warning", json.dumps(matrix))
+
     def test_final_matrix_derives_review_and_blocked_from_canonical_gates(self) -> None:
         base_status = {
             "generated": True,
