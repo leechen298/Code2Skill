@@ -27,6 +27,8 @@ MCP Tools answer **what can execute**. Feature Context answers **what the capabi
 
 The Producer's ability to read code or run commands is not part of the generated capability. Consumer requirements must be declared separately and checked against the actual Host.
 
+For a client feature, the APIs actually invoked by that client define the candidate execution surface. Backend, contract, and test code refine those candidates; they do not automatically enlarge the public Tool set. A backend-only operation enters scope only when the user explicitly requests it or another authorized public entry surface proves it belongs to the same feature.
+
 ## Capability boundary test
 
 A candidate is a strong Tool when most answers are yes:
@@ -69,6 +71,12 @@ Represent such rules twice when useful:
 
 Never rely on prose alone for a non-bypassable rule.
 
+Cross-capability data flow is typed, not descriptive. An upstream strategy, dynamic domain, Goal acquisition source, handoff mapping, observed graph edge, and attachment consumer must resolve the same declared output path and compatible target Schema/cardinality. For `direct`, `select-one`, and `append-to-array` mappings, the Canonical Contract is the only source of truth.
+
+Do not classify every backend rejection as a non-bypassable dependency. Ordinary business eligibility, current availability, and server-owned field validation remain authoritative at the target API and return as structured recoverable errors. Use a deterministic Workflow only when source evidence proves that bypassing an identity, confirmation, provenance, transaction, attachment-source, at-most-once, or unknown-outcome edge would be unsafe or inconsistent.
+
+A deterministic Workflow binding has a source-proven actual value and an expected value from protected runtime state or an immutable constant. Comparing a public argument with a second value derived from that same argument is not enforcement. The protected Guard owns the Canonical projection rules, projects from the exact input and trusted runtime context, and dispatches the same frozen input; caller-projected binding objects and arbitrary verifier callbacks are forbidden.
+
 ## Information requirement semantics
 
 Do not require the user to provide every input in the first message. For each goal, distinguish:
@@ -76,10 +84,18 @@ Do not require the user to provide every input in the first message. For each go
 - always-required information;
 - conditionally required or forbidden information;
 - optional information;
-- derived information that must come from a trusted computation or prior result;
-- dynamic information scoped to a current identity, tenant, session, version, or validity window.
+- derived information that must come from an exact Capability output or declared trusted Host requirement, never user self-report or an unimplemented local calculation;
+- dynamic information scoped to a current identity, tenant, session, version, or validity window and acquired through an exact Capability output or declared trusted Host requirement.
 
-The Agent should reuse still-valid known information, call safe read capabilities when they can fill gaps, and ask only for missing values that cannot be obtained safely. Recompute the missing set when a condition changes or dynamic information expires. A completion predicate, not a fixed transcript, decides when the goal is ready.
+Attachment upload results are also source-defined information. Preserve the target API's URL, file ID, object key, opaque token, or object shape and its proven scope/reuse rules. Do not convert every result into a session-bound single-use grant; add such a Guard only when the source contract proves it.
+
+The Agent should reuse still-valid known information, call safe read capabilities when they can fill gaps, and ask only for missing values that cannot be obtained safely. Report trusted-context acquisition separately from user questions. When several compatible capabilities can satisfy one need, expose one alternative set and choose one compatible provider instead of calling every provider. Recompute the missing set when a condition changes or dynamic information expires. A completion predicate, not a fixed transcript, decides when the goal is ready.
+
+Each `informationNeeds[]` entry is also an executable data contract. It declares a portable `type`; object and array values carry a complete closed Schema. Its `supplies[]` entries map that information to exact required Capability inputs through `{capabilityId, inputName, mappingKind}`, with exactly one mapping per target input across the Goal. The Goal's acquisition source, information Schema/cardinality, mapping kind, and target input source strategy must agree. When one need supplies several inputs, at least one advertised source must be compatible with all targets; trusted Host requirement IDs match exactly, upstream-only opaque values cannot fall back to users, and optional information cannot supply an unconditional required input. Every required or conditionally required input of a Capability participating in the Goal must be covered.
+
+`requiredWhen` conditions resolve paths against the declared information Schemas and exactly match the condition of every Capability input they supply. They may not depend on optional information, themselves, unknown fields, or a cycle in the combined acquisition-provider, supplies, and activation graph. Object-form conditional Capability declarations use the same condition as their linked need, and explicit `conditionalNeedsOnlyWhenActive` is always true. If activation cannot yet be resolved, the Goal remains pending and first acquires the dependency; it must not guess that the conditional item is active or inactive.
+
+`reuseWhile` contains only executable true-valued claims such as `sameSubject`, `sameTenant`, `sameSession`, `samePayloadDigest`, `sameVersion`, `notEdited`, `notExpired`, or `notConsumed`, plus fact-level evidence. Generated Goal-state vectors mark a value obtained in the current acquisition with `{__goalState: true, value, acquiredNow: true}`. A cached value uses the same wrapper with a claim-by-claim `reuseProof`; every true Canonical claim must be proven. A bare `fresh: true` flag is not a substitute for that proof. Values that fail their information Schema or reuse proof remain invalid or missing rather than satisfying the completion predicate.
 
 ## Capability graph semantics
 
@@ -88,6 +104,16 @@ Model observed handoffs and dependencies in the Canonical Contract's `capability
 Compositions proven in source are `observed`. A new but contract-compatible combination is a `derived composition`; it requires separate verification and must not be described as source behavior. Flexible read-only composition is allowed when authorization and contracts permit it. A derived write composition still needs every original runtime guard.
 
 Dynamic catalogs are not static enums. A set observed for one user, tenant, environment, or time is only a sample unless source evidence proves a stable closed domain.
+
+## Write protection classification
+
+Every write declares one `runtimeProtection.mode`:
+
+- `backend-authoritative`: the client-observed target API owns ordinary business validation; no synthetic preflight or local Workflow is generated.
+- `deterministic-workflow`: source evidence proves identity, confirmation, provenance, transaction, single-use, or at-most-once edges that must be guarded before dispatch.
+- `unresolved`: the frontend proves a write API exists, but the backend owner, authorization, idempotency, confirmation, or unknown-outcome boundary is not available. This mode is never `ready`, does not guess an owner, and has no Workflow.
+
+Only `deterministic-workflow` capabilities map to `canonical-contract.json.workflows[]` and require a generated Guard.
 
 ## Origin and confidence
 
@@ -98,3 +124,7 @@ Mark every workflow as `observed` or `derived`. Mark every material claim as:
 - `unknown`: required information is absent or contradictory.
 
 Only observed workflows qualify as source-derived Golden baselines. Derived Skills require separate validation.
+
+## Error semantics
+
+Keep errors useful for progressive recovery. A Consumer should be able to distinguish malformed Tool input, correctable business rejection, authorization/tenancy failure, upstream/network failure, malformed upstream output, and an unknown write outcome. Preserve source error codes, messages, field details, retryability, and outcome certainty when they are available. Do not convert every failure into one prose string, and do not let a business rejection imply that the Skill or MCP transport itself is broken.

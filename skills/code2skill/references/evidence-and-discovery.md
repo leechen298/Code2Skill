@@ -1,18 +1,22 @@
 # Evidence and discovery
 
-## Evidence priority
+## Capability surface and evidence priority
 
-Prefer stronger, closer-to-runtime evidence:
+For a client feature, first inventory the backend APIs the client actually calls. That observed API set defines the candidate execution surface; Tool boundaries are still chosen by business value rather than one-request-equals-one-Tool. Do not add a backend-internal method, controller action, service function, or persistence operation merely because source search finds it. Add a capability outside the client-observed surface only when the user explicitly expands scope or another authorized public entry surface proves it belongs.
+
+After the surface is established, prefer stronger, closer-to-runtime evidence when resolving each contract fact:
 
 1. executable tests and protocol contracts;
 2. executable transfer contracts and validation, including but not limited to OpenAPI, GraphQL, Proto, request/response types, validators, serializers, or runtime parsing;
-3. authorization, application orchestration, transaction, business-rule, external-call, and persistence code;
-4. client API adapters, state, validation, and control-flow code;
+3. client API adapters and their exact request/response transformation, which prove what the client actually invokes;
+4. authorization, application orchestration, transaction, business-rule, external-call, and persistence code, which supplement and qualify the observed API contract;
 5. routes, components, labels, and result rendering;
 6. comments, prose documentation, and naming;
 7. model inference.
 
 Contradictions must remain visible. Do not silently choose a convenient source.
+
+This ranking does not mean every server-side business rule must be duplicated in the generated Function. The real target API remains authoritative for ordinary eligibility and business acceptance. Backend evidence is used to describe dynamic/conditional behavior, preserve useful errors, and identify truly non-bypassable identity, side-effect, idempotency, confirmation, provenance, and unknown-outcome constraints.
 
 This ranking describes semantic evidence, not required language or architecture layers. A project may express all of these roles in functions, decorators, configuration, protocol files, generated code, message handlers, or dynamic objects without using names such as DTO, Controller, or Service.
 
@@ -40,6 +44,7 @@ For a client-visible feature, inspect:
 - visibility/disabled conditions and confirmation behavior;
 - state transitions, caching, pagination, sorting, filtering, and retries;
 - API client calls, headers, tokens, request IDs, and response transformation;
+- the exact set of backend APIs reached from the scoped feature, including conditional branches, and the backend symbols that are outside that call graph;
 - server entry points, authentication, authorization, tenancy, validation, application orchestration, business rules, external calls, and persistence;
 - tests covering success, failure, boundary, and permission behavior.
 
@@ -63,6 +68,18 @@ This is the exact `canonical-contract.json.evidenceCatalog[]` shape, not a paral
 
 Material Canonical Contract facts and Feature Context rows cite `evidenceId` values from this catalog. If two roots disagree about a required field, value domain, failure rule, or side effect, preserve both evidence IDs in the conflict and explain why one source is authoritative. An unresolved conflict is not a license to choose the easier implementation.
 
+## Operation-bound fact evidence
+
+An evidence item proves only the semantic fact and operation to which it is attached. Do not treat “the API exists,” a route entry, a field label, or evidence from a neighboring operation as proof of an executable contract. At minimum:
+
+- read `evidenceCoverage` contains exactly `sideEffect`; write coverage contains exactly `sideEffect`, `backendContract`, `authorization`, `validation`, `idempotency`, and `unknownOutcome`. Every category is fact-level, cites evidence from an authoritative source for that exact operation, and uses a semantic role appropriate to the category; `declaredSideEffect` equals the Capability effect;
+- every HTTP step cites fact-level request-construction, serialization, transport-contract, or behavior-test evidence; each exact request binding cites request-construction, serialization, or transport-contract evidence;
+- every public output and `successRule` cites fact-level response-consumption, serialization, transport-contract, behavior-test, or failure-test evidence for the actual response;
+- every conditional rule cites fact-level validation, business-rule, transport, request-construction, or behavior-test evidence;
+- every dynamic scope/freshness policy and Goal `reuseWhile` claim cites fact-level evidence that proves that exact provenance, scope, invalidation, or reuse boundary.
+
+Place the references on the exact Capability, step, binding, output, condition, or policy record they support. Generic capability-level references may aid discovery, but they cannot replace these operation-bound facts or be borrowed to make another operation look complete.
+
 ## Frontend-only boundary
 
 Frontend code can strongly support UI purpose, field semantics, option sources, visible conditions, request shape, and observed sequencing. It usually cannot prove server authorization, transactionality, idempotency, financial consequences, tenant isolation, or compensation.
@@ -71,9 +88,12 @@ With frontend-only evidence, or whenever an equivalent authoritative execution b
 
 - generate Feature Context;
 - generate read-only capabilities when their implementation is safe and real;
-- draft write contracts as `requires-review` when necessary;
+- generate the source-proven Function/MCP contract while marking unproven safety facts and capability state honestly;
+- keep a write at `requires-review` when authorization, material side effects, idempotency, confirmation, or unknown-outcome behavior cannot be established;
 - do not claim production-safe mutations or invent hidden business rules;
 - state what backend evidence would close each unknown.
+
+Do not block a client-observed API merely because every ordinary server validation branch is not locally available. Preserve the server as the authority and expose its business rejection through a structured Tool error. Conversely, a visible client-side check does not justify inventing a hard runtime Workflow unless source evidence proves bypass would violate a non-bypassable safety, transaction, identity, provenance, or at-most-once rule.
 
 If a dynamic catalog is only observed from one fixture, user, tenant, environment, or timestamp, record it as a sample. Do not promote those values into a stable closed enum without executable evidence that the domain is static.
 
@@ -84,3 +104,4 @@ If a dynamic catalog is only observed from one fixture, user, tenant, environmen
 - A hidden UI action does not prove the API is disabled.
 - A request appearing in one path does not prove it is mandatory in every path.
 - Similar labels do not prove two actions share a contract.
+- A backend method outside the scoped client's actual API call graph does not prove it belongs in the generated capability surface.

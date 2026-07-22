@@ -9,7 +9,7 @@
   "sources": [
     {
       "sourceId": "sample-client",
-      "semanticRoles": ["user-entry", "request-construction", "response-consumption"],
+      "semanticRoles": ["user-entry", "client-api-call", "request-construction", "response-consumption"],
       "root": "sources/client",
       "availability": "available",
       "searched": true,
@@ -17,7 +17,7 @@
     },
     {
       "sourceId": "sample-service",
-      "semanticRoles": ["authorization", "validation", "business-rule", "side-effect"],
+      "semanticRoles": ["authorization", "validation", "business-rule", "side-effect", "idempotency"],
       "root": "sources/service",
       "availability": "available",
       "searched": true,

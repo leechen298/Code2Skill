@@ -32,6 +32,7 @@
       "properties": {
         "name": {"type": "string", "minLength": 1},
         "checkId": {"type": "string", "minLength": 1},
+        "phase": {"enum": ["behavior", "runtime", "host", "bypass"]},
         "layer": {"type": "string", "minLength": 1},
         "command": {"type": "string", "minLength": 1},
         "exitCode": {"type": "integer", "minimum": 0},
@@ -40,13 +41,54 @@
         "toolName": {"type": "string", "minLength": 1},
         "inputHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
         "resultHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "zeroExternalWrites": {"type": "boolean"}
+        "zeroExternalWrites": {"type": "boolean"},
+        "attachmentProof": {"$ref": "#/$defs/attachmentProof"}
+      }
+    },
+    "attachmentProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resolverCalls",
+        "businessDispatches",
+        "resolutionFailureDispatches",
+        "rawGrantForwarded",
+        "resolvedContentBound",
+        "sizeVerified",
+        "digestVerified",
+        "stepId",
+        "location",
+        "path",
+        "traceEvidenceHash"
+      ],
+      "properties": {
+        "resolverCalls": {"const": 1},
+        "businessDispatches": {"const": 1},
+        "resolutionFailureDispatches": {"const": 0},
+        "rawGrantForwarded": {"const": false},
+        "resolvedContentBound": {"const": true},
+        "sizeVerified": {"const": true},
+        "digestVerified": {"const": true},
+        "stepId": {"type": "string", "minLength": 1},
+        "location": {"type": "string", "minLength": 1},
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "traceEvidenceHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
       }
     },
     "passedExecutedCheck": {
       "allOf": [
         {"$ref": "#/$defs/executedCheck"},
-        {"type": "object", "properties": {"status": {"const": "passed"}}}
+        {
+          "type": "object",
+          "properties": {
+            "status": {"const": "passed"},
+            "exitCode": {"const": 0}
+          }
+        }
       ]
     },
     "passedRuntimeCheck": {

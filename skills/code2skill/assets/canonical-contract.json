@@ -10,6 +10,14 @@
     "hostBinding": "none",
     "discoveryBasis": "observable-semantic-evidence"
   },
+  "featureBoundary": {
+    "scopeKind": "business-feature",
+    "primaryEvidenceRole": "client-feature",
+    "backendEvidenceRole": "supplement-and-verify",
+    "inclusionRule": "client-observed-only",
+    "clientSourceIds": ["sample-client"],
+    "supplementarySourceIds": ["sample-service", "sample-contract", "sample-tests"]
+  },
   "conflicts": [
     {
       "conflictId": "dynamic-catalog-versus-client-snapshot",
@@ -29,9 +37,100 @@
       "assertionLevel": "fact"
     },
     {
+      "evidenceId": "ev-client-list-call",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/api#listKinds",
+      "semanticRole": "client-api-call",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-client-upload-call",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/api#uploadAttachment",
+      "semanticRole": "client-api-call",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-client-upload-request",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/api#uploadAttachmentMultipartFile",
+      "semanticRole": "request-construction",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-client-validate-call",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/api#validateRequest",
+      "semanticRole": "client-api-call",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-client-validate-request",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/api#validateRequestBody",
+      "semanticRole": "request-construction",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-client-save-call",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/api#saveDraft",
+      "semanticRole": "client-api-call",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-client-save-request",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/api#saveDraftBody",
+      "semanticRole": "request-construction",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-client-submit-call",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/api#submitRequest",
+      "semanticRole": "client-api-call",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-client-submit-request",
+      "sourceId": "sample-client",
+      "locator": "features/sample-request/api#submitRequestBody",
+      "semanticRole": "request-construction",
+      "assertionLevel": "fact"
+    },
+    {
       "evidenceId": "ev-contract-catalog",
       "sourceId": "sample-contract",
       "locator": "contracts/sample-request#listKinds",
+      "semanticRole": "transport-contract",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-contract-attachment",
+      "sourceId": "sample-contract",
+      "locator": "contracts/sample-request#uploadAttachment",
+      "semanticRole": "transport-contract",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-contract-validation",
+      "sourceId": "sample-contract",
+      "locator": "contracts/sample-request#validateRequest",
+      "semanticRole": "transport-contract",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-contract-save",
+      "sourceId": "sample-contract",
+      "locator": "contracts/sample-request#saveDraft",
+      "semanticRole": "transport-contract",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-contract-submit",
+      "sourceId": "sample-contract",
+      "locator": "contracts/sample-request#submitRequest",
       "semanticRole": "transport-contract",
       "assertionLevel": "fact"
     },
@@ -61,6 +160,34 @@
       "sourceId": "sample-service",
       "locator": "sample-request/commands#submitOnce",
       "semanticRole": "side-effect",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-service-save",
+      "sourceId": "sample-service",
+      "locator": "sample-request/commands#saveDraftWithBackendValidation",
+      "semanticRole": "business-rule",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-service-upload-idempotency",
+      "sourceId": "sample-service",
+      "locator": "sample-request/attachments#deduplicateByContentHash",
+      "semanticRole": "idempotency",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-service-save-idempotency",
+      "sourceId": "sample-service",
+      "locator": "sample-request/commands#replaceDraftIdempotently",
+      "semanticRole": "idempotency",
+      "assertionLevel": "fact"
+    },
+    {
+      "evidenceId": "ev-service-submit-idempotency",
+      "sourceId": "sample-service",
+      "locator": "sample-request/commands#submitAtMostOnce",
+      "semanticRole": "idempotency",
       "assertionLevel": "fact"
     },
     {
@@ -99,6 +226,11 @@
       "authentication": "runtime_context",
       "readiness": "ready",
       "missingEvidence": [],
+      "exposure": {
+        "kind": "client-request",
+        "evidenceRefs": ["ev-client-list-call"],
+        "supplementalEvidenceRefs": ["ev-contract-catalog", "ev-service-selection"]
+      },
       "inputs": [
         {
           "name": "detailLevel",
@@ -117,14 +249,44 @@
       "outputs": [
         {
           "path": ["options"],
+          "type": "array",
           "description": "Current options with display data, conditions, and opaque selection grants.",
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {"type": "string"},
+                "selectionGrant": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "grantId": {"type": "string"},
+                    "requiresAttachment": {"type": "boolean"},
+                    "allowsAttachment": {"type": "boolean"}
+                  },
+                  "required": ["grantId", "requiresAttachment", "allowsAttachment"]
+                }
+              },
+              "required": ["label", "selectionGrant"]
+            }
+          },
           "valueDomain": {
             "kind": "dynamic",
             "identityScoped": true,
             "tenantScoped": true,
             "sessionScoped": true,
-            "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "tenant-changed", "expired"]}
+            "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "tenant-changed", "session-changed", "expired"]},
+            "evidenceRefs": ["ev-contract-catalog", "ev-service-selection"]
           },
+          "evidenceRefs": ["ev-contract-catalog", "ev-service-selection"]
+        },
+        {
+          "path": ["options", "*", "selectionGrant"],
+          "type": "object",
+          "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "requiresAttachment": {"type": "boolean"}, "allowsAttachment": {"type": "boolean"}}, "required": ["grantId", "requiresAttachment", "allowsAttachment"]},
+          "description": "One current source-issued selection grant chosen from the dynamic catalog.",
           "evidenceRefs": ["ev-contract-catalog", "ev-service-selection"]
         }
       ],
@@ -155,6 +317,16 @@
         "requiredOutputPaths": [["options"]],
         "evidenceRefs": ["ev-contract-catalog", "ev-contract-errors"]
       },
+      "errorContract": {
+        "format": "structured",
+        "preservesRecoveryContext": true,
+        "codePath": ["code"],
+        "messagePath": ["message"],
+        "detailsPath": ["details"],
+        "retryabilityPath": ["retryable"],
+        "defaultRetryable": false,
+        "evidenceRefs": ["ev-contract-errors"]
+      },
       "operationPolicy": {
         "sideEffect": "read",
         "idempotency": "safe",
@@ -162,9 +334,12 @@
         "confirmation": "not-required",
         "unknownOutcome": "not-applicable"
       },
+      "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
       "sideEffect": "read",
       "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "session-state"],
-      "evidenceCoverage": {},
+      "evidenceCoverage": {
+        "sideEffect": {"declaredSideEffect": "read", "assertionLevel": "fact", "evidenceRefs": ["ev-contract-catalog"]}
+      },
       "verificationChecks": ["dynamic-values-are-not-frozen", "identity-change-invalidates-selection-grants"],
       "evidenceRefs": ["ev-contract-catalog", "ev-service-selection"]
     },
@@ -176,11 +351,28 @@
       "authentication": "runtime_context",
       "readiness": "ready",
       "missingEvidence": [],
+      "exposure": {
+        "kind": "client-request",
+        "evidenceRefs": ["ev-client-upload-call"],
+        "supplementalEvidenceRefs": ["ev-contract-attachment", "ev-service-attachment", "ev-service-auth", "ev-service-upload-idempotency", "ev-contract-errors"]
+      },
       "inputs": [
         {
           "name": "hostAttachmentGrant",
           "description": "Opaque grant for one user-approved attachment, including bounded metadata and content access.",
           "type": "object",
+          "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "grantId": {"type": "string"},
+              "fileName": {"type": "string"},
+              "mediaType": {"type": "string"},
+              "sizeBytes": {"type": "integer", "minimum": 0, "maximum": 1048576},
+              "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+            },
+            "required": ["grantId", "fileName", "mediaType", "sizeBytes", "sha256"]
+          },
           "required": true,
           "informationClass": "attachment",
           "sourceStrategies": ["host-approved-attachment"],
@@ -188,14 +380,32 @@
           "requiredWhen": [],
           "forbiddenWhen": [],
           "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired"]},
-          "evidenceRefs": ["ev-service-attachment"]
+          "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment"]
         }
       ],
       "outputs": [
         {
           "path": ["uploadedAttachmentGrant"],
+          "type": "object",
+          "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "grantId": {"type": "string"},
+              "uploadResult": {"type": "string"}
+            },
+            "required": ["grantId", "uploadResult"]
+          },
           "description": "Opaque, subject- and session-bound upload result grant for downstream validation and submission.",
-          "evidenceRefs": ["ev-service-attachment"]
+          "valueDomain": {
+            "kind": "dynamic",
+            "identityScoped": true,
+            "tenantScoped": false,
+            "sessionScoped": true,
+            "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired", "consumed"]},
+            "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment"]
+          },
+          "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment"]
         }
       ],
       "constraints": [
@@ -210,13 +420,33 @@
       ],
       "attachments": {
         "mode": "host-approved-reference",
-        "acceptedInputs": ["opaque-host-grant", "bounded-content"],
+        "hostInputRole": "approved-reference-or-bounded-content",
+        "uploadOwner": "business-tool",
+        "acceptedInputs": ["opaque-host-grant"],
         "forbiddenInputs": ["local-path", "unverified-url"],
         "metadata": {
           "required": ["fileName", "mediaType", "sizeBytes", "sha256"],
-          "maxSizeBytes": 1048576
+          "maxSizeBytes": 1048576,
+          "evidenceRefs": ["ev-contract-attachment"]
         },
-        "resultBinding": {"kind": "opaque-token", "role": "uploaded-attachment-grant", "subjectScoped": true, "sessionScoped": true, "singleUse": true},
+        "contentBindings": [
+          {
+            "inputName": "hostAttachmentGrant",
+            "stepId": "uploadAttachment",
+            "location": "multipart",
+            "path": ["file"],
+            "requirementId": "attachment-resolution",
+            "evidenceRefs": ["ev-client-upload-request", "ev-service-attachment"]
+          }
+        ],
+        "resultBinding": {
+          "kind": "source-defined",
+          "valueKind": "object",
+          "outputPath": ["uploadedAttachmentGrant"],
+          "scoping": {"subject": true, "session": true},
+          "reuse": "single-use",
+          "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment"]
+        },
         "enforcedByWorkflow": "upload-sample-attachment"
       },
       "workflowId": "upload-sample-attachment",
@@ -231,14 +461,14 @@
             "headers": {"accept": "application/json"},
             "bindings": [
               {
-                "source": {"kind": "input", "inputName": "hostAttachmentGrant"},
-                "location": "body",
-                "path": ["attachment"],
-                "evidenceRefs": ["ev-service-attachment"]
+              "source": {"kind": "host_resolved_attachment", "inputName": "hostAttachmentGrant", "requirementId": "attachment-resolution"},
+              "location": "multipart",
+              "path": ["file"],
+                "evidenceRefs": ["ev-client-upload-request", "ev-service-attachment"]
               }
             ],
             "successStatusCodes": [201],
-            "evidenceRefs": ["ev-service-attachment"]
+            "evidenceRefs": ["ev-contract-attachment", "ev-client-upload-request", "ev-service-attachment"]
           }
         ],
         "outputStepId": "uploadAttachment"
@@ -248,7 +478,17 @@
         "outputRequired": true,
         "forbiddenOutputKeys": ["error", "errors"],
         "requiredOutputPaths": [["uploadedAttachmentGrant"]],
-        "evidenceRefs": ["ev-service-attachment", "ev-contract-errors"]
+        "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment", "ev-contract-errors"]
+      },
+      "errorContract": {
+        "format": "structured",
+        "preservesRecoveryContext": true,
+        "codePath": ["code"],
+        "messagePath": ["message"],
+        "detailsPath": ["details"],
+        "retryabilityPath": ["retryable"],
+        "defaultRetryable": false,
+        "evidenceRefs": ["ev-contract-errors"]
       },
       "operationPolicy": {
         "sideEffect": "create",
@@ -257,17 +497,29 @@
         "confirmation": "upload-confirmation-required",
         "unknownOutcome": "reconcile-before-any-retry"
       },
+      "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": true},
       "sideEffect": "create",
-      "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "trusted-confirmation", "session-state", "attachment-resolution", "secure-upload", "unknown-outcome-reconciliation"],
+      "runtimeProtection": {
+        "mode": "deterministic-workflow",
+        "workflowId": "upload-sample-attachment",
+        "evidenceRefs": ["ev-service-attachment", "ev-tests-workflow"]
+      },
+      "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "trusted-confirmation", "session-state", "attachment-resolution", "unknown-outcome-reconciliation"],
       "evidenceCoverage": {
+        "sideEffect": {"declaredSideEffect": "create", "assertionLevel": "fact", "evidenceRefs": ["ev-service-attachment"]},
         "backendContract": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-attachment"]},
         "authorization": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-auth"]},
         "validation": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-attachment"]},
-        "idempotency": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-attachment"]},
+        "idempotency": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-upload-idempotency"]},
         "unknownOutcome": {"assertionLevel": "fact", "evidenceRefs": ["ev-contract-errors"]}
       },
-      "verificationChecks": ["reject-local-file-path-before-dispatch", "reject-oversize-before-dispatch", "unknown-upload-outcome-does-not-auto-retry"],
-      "evidenceRefs": ["ev-service-attachment", "ev-service-auth"]
+      "verificationChecks": [
+        {"checkId": "reject-local-file-path-before-dispatch", "phase": "behavior"},
+        {"checkId": "reject-oversize-before-dispatch", "phase": "behavior"},
+        {"checkId": "attachment-resolution-runtime-vector", "phase": "runtime"},
+        {"checkId": "unknown-upload-outcome-does-not-auto-retry", "phase": "behavior"}
+      ],
+      "evidenceRefs": ["ev-contract-attachment", "ev-client-upload-request", "ev-service-attachment", "ev-service-auth", "ev-service-upload-idempotency", "ev-contract-errors"]
     },
     {
       "capabilityId": "validate-sample-request",
@@ -277,20 +529,30 @@
       "authentication": "runtime_context",
       "readiness": "ready",
       "missingEvidence": [],
+      "exposure": {
+        "kind": "client-request",
+        "evidenceRefs": ["ev-client-validate-call"],
+        "supplementalEvidenceRefs": ["ev-contract-validation", "ev-service-selection", "ev-service-validation", "ev-contract-errors"]
+      },
       "inputs": [
         {
           "name": "selectionGrant",
           "description": "Current dynamic selection issued by list_sample_request_kinds.",
           "type": "object",
+          "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "requiresAttachment": {"type": "boolean"}, "allowsAttachment": {"type": "boolean"}}, "required": ["grantId", "requiresAttachment", "allowsAttachment"]},
           "required": true,
           "informationClass": "dynamic",
-          "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "list-sample-request-kinds", "outputPath": ["options", "*", "selectionGrant"]}],
+          "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "list-sample-request-kinds", "outputPath": ["options", "*", "selectionGrant"], "mappingKind": "select-one"}],
           "valueDomain": {
             "kind": "dynamic",
             "sourceCapabilityId": "list-sample-request-kinds",
             "sourcePath": ["options", "*", "selectionGrant"],
+            "mappingKind": "select-one",
             "identityScoped": true,
-            "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired"]}
+            "tenantScoped": true,
+            "sessionScoped": true,
+            "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "tenant-changed", "session-changed", "expired"]},
+            "evidenceRefs": ["ev-contract-catalog", "ev-service-selection"]
           },
           "requiredWhen": [],
           "forbiddenWhen": [],
@@ -301,9 +563,10 @@
           "name": "requestData",
           "description": "User-provided request fields that remain unchanged through validation and submission.",
           "type": "object",
+          "schema": {"type": "object", "additionalProperties": false, "properties": {"subject": {"type": "string"}, "note": {"type": "string"}}, "required": ["subject"]},
           "required": true,
           "informationClass": "required",
-          "sourceStrategies": ["user", "trusted-host-context"],
+          "sourceStrategies": ["user"],
           "valueDomain": {"kind": "unconstrained"},
           "requiredWhen": [],
           "forbiddenWhen": [],
@@ -314,19 +577,20 @@
           "name": "attachmentGrants",
           "description": "Approved upload results required only when the current selection declares an attachment requirement.",
           "type": "array",
+          "schema": {"type": "array", "items": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "uploadResult": {"type": "string"}}, "required": ["grantId", "uploadResult"]}},
           "required": false,
           "informationClass": "requiredWhen",
-          "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"]}],
-          "valueDomain": {"kind": "unconstrained"},
-          "requiredWhen": [{"path": ["selectionGrant", "requiresAttachment"], "operator": "equals", "value": true}],
-          "forbiddenWhen": [{"path": ["selectionGrant", "allowsAttachment"], "operator": "equals", "value": false}],
+          "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array"}],
+          "valueDomain": {"kind": "dynamic", "sourceCapabilityId": "upload-sample-attachment", "sourcePath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array", "identityScoped": true, "tenantScoped": false, "sessionScoped": true, "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment"]},
+          "requiredWhen": [{"path": ["selectionGrant", "requiresAttachment"], "operator": "equals", "value": true, "evidenceRefs": ["ev-service-selection"]}],
+          "forbiddenWhen": [{"path": ["selectionGrant", "allowsAttachment"], "operator": "equals", "value": false, "evidenceRefs": ["ev-service-selection"]}],
           "freshness": {"ttlSeconds": 300, "refreshWhen": ["session-changed", "expired", "consumed"]},
           "evidenceRefs": ["ev-service-attachment", "ev-service-validation"]
         }
       ],
       "outputs": [
-        {"path": ["validationGrant"], "description": "Opaque subject-, session-, and payload-bound validation grant.", "evidenceRefs": ["ev-service-validation"]},
-        {"path": ["payloadDigest"], "description": "Canonical digest of the exact validated payload.", "evidenceRefs": ["ev-service-validation"]}
+        {"path": ["validationGrant"], "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "payloadDigest": {"type": "string"}}, "required": ["grantId", "payloadDigest"]}, "description": "Opaque subject-, session-, and payload-bound validation grant.", "valueDomain": {"kind": "dynamic", "identityScoped": true, "tenantScoped": false, "sessionScoped": true, "freshness": {"ttlSeconds": 120, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-validation", "ev-service-validation"]}, "evidenceRefs": ["ev-contract-validation", "ev-service-validation"]},
+        {"path": ["payloadDigest"], "type": "string", "description": "Canonical digest of the exact validated payload.", "valueDomain": {"kind": "unconstrained"}, "evidenceRefs": ["ev-contract-validation", "ev-service-validation"]}
       ],
       "constraints": [
         {
@@ -338,7 +602,7 @@
           "evidenceRefs": ["ev-service-validation"]
         }
       ],
-      "attachments": {"mode": "opaque-upload-results", "forbiddenInputs": ["local-path", "unverified-url"]},
+      "attachments": {"mode": "business-upload-results", "forbiddenInputs": ["local-path", "unverified-url"], "consumerBindings": [{"inputName": "attachmentGrants", "providerCapabilityId": "upload-sample-attachment", "providerOutputPath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array", "evidenceRefs": ["ev-service-attachment", "ev-service-validation"]}]},
       "implementation": {
         "kind": "http",
         "steps": [
@@ -349,12 +613,12 @@
             "url": "https://application.example/api/sample-request/validate",
             "headers": {"accept": "application/json", "content-type": "application/json"},
             "bindings": [
-              {"source": {"kind": "input", "inputName": "selectionGrant"}, "location": "body", "path": ["selectionGrant"], "evidenceRefs": ["ev-service-selection"]},
-              {"source": {"kind": "input", "inputName": "requestData"}, "location": "body", "path": ["requestData"], "evidenceRefs": ["ev-service-validation"]},
-              {"source": {"kind": "input", "inputName": "attachmentGrants"}, "location": "body", "path": ["attachmentGrants"], "evidenceRefs": ["ev-service-validation"]}
+              {"source": {"kind": "input", "inputName": "selectionGrant"}, "location": "body", "path": ["selectionGrant"], "evidenceRefs": ["ev-client-validate-request", "ev-contract-validation"]},
+              {"source": {"kind": "input", "inputName": "requestData"}, "location": "body", "path": ["requestData"], "evidenceRefs": ["ev-client-validate-request", "ev-contract-validation"]},
+              {"source": {"kind": "input", "inputName": "attachmentGrants"}, "location": "body", "path": ["attachmentGrants"], "evidenceRefs": ["ev-client-validate-request", "ev-contract-validation"]}
             ],
             "successStatusCodes": [200],
-            "evidenceRefs": ["ev-service-validation"]
+            "evidenceRefs": ["ev-client-validate-request", "ev-contract-validation", "ev-service-validation"]
           }
         ],
         "outputStepId": "validateRequest"
@@ -364,7 +628,17 @@
         "outputRequired": true,
         "forbiddenOutputKeys": ["error", "errors"],
         "requiredOutputPaths": [["validationGrant"], ["payloadDigest"]],
-        "evidenceRefs": ["ev-service-validation", "ev-contract-errors"]
+        "evidenceRefs": ["ev-contract-validation", "ev-service-validation", "ev-contract-errors"]
+      },
+      "errorContract": {
+        "format": "structured",
+        "preservesRecoveryContext": true,
+        "codePath": ["code"],
+        "messagePath": ["message"],
+        "detailsPath": ["details"],
+        "retryabilityPath": ["retryable"],
+        "defaultRetryable": false,
+        "evidenceRefs": ["ev-contract-errors"]
       },
       "operationPolicy": {
         "sideEffect": "read",
@@ -373,11 +647,120 @@
         "confirmation": "not-required",
         "unknownOutcome": "not-applicable"
       },
+      "annotations": {"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
       "sideEffect": "read",
       "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "session-state"],
-      "evidenceCoverage": {},
-      "verificationChecks": ["different-information-orders-converge", "derived-values-cannot-be-forged", "conditional-attachment-is-enforced"],
-      "evidenceRefs": ["ev-service-selection", "ev-service-validation"]
+      "evidenceCoverage": {
+        "sideEffect": {"declaredSideEffect": "read", "assertionLevel": "fact", "evidenceRefs": ["ev-service-validation"]}
+      },
+      "verificationChecks": ["different-information-orders-converge", "derived-values-cannot-be-forged", "conditional-attachment-is-enforced", "attachment-upload-result-reaches-final-request"],
+      "evidenceRefs": ["ev-client-validate-request", "ev-contract-validation", "ev-service-selection", "ev-service-validation", "ev-contract-errors"]
+    },
+    {
+      "capabilityId": "save-sample-draft",
+      "toolName": "save_sample_draft",
+      "functionExport": "saveSampleDraft",
+      "description": "Save the current draft through the client-observed API and let the authoritative backend apply ordinary business validation.",
+      "authentication": "runtime_context",
+      "readiness": "ready",
+      "missingEvidence": [],
+      "exposure": {
+        "kind": "client-request",
+        "evidenceRefs": ["ev-client-save-call"],
+        "supplementalEvidenceRefs": ["ev-contract-save", "ev-service-save", "ev-service-save-idempotency", "ev-service-auth", "ev-contract-errors"]
+      },
+      "inputs": [
+        {
+          "name": "requestData",
+          "description": "The draft fields already known from the conversation or trusted context.",
+          "type": "object",
+          "schema": {"type": "object", "additionalProperties": false, "properties": {"subject": {"type": "string"}, "note": {"type": "string"}}, "required": ["subject"]},
+          "required": true,
+          "informationClass": "required",
+          "sourceStrategies": ["user"],
+          "valueDomain": {"kind": "unconstrained"},
+          "requiredWhen": [],
+          "forbiddenWhen": [],
+          "freshness": {"refreshWhen": ["user-edited"]},
+          "evidenceRefs": ["ev-client-save-call", "ev-service-save"]
+        }
+      ],
+      "outputs": [
+        {
+          "path": ["draftId"],
+          "type": "string",
+          "description": "Stable draft identifier returned by the backend after validation and persistence.",
+          "valueDomain": {"kind": "unconstrained"},
+          "evidenceRefs": ["ev-contract-save", "ev-service-save"]
+        }
+      ],
+      "constraints": [],
+      "attachments": {"mode": "none"},
+      "implementation": {
+        "kind": "http",
+        "steps": [
+          {
+            "stepId": "saveDraft",
+            "method": "PUT",
+            "authentication": "runtime_context",
+            "url": "https://application.example/api/sample-request/draft",
+            "headers": {"accept": "application/json", "content-type": "application/json"},
+            "bindings": [
+              {
+                "source": {"kind": "input", "inputName": "requestData"},
+                "location": "body",
+                "path": ["requestData"],
+                "evidenceRefs": ["ev-client-save-request", "ev-contract-save"]
+              }
+            ],
+            "successStatusCodes": [200],
+            "evidenceRefs": ["ev-client-save-request", "ev-contract-save", "ev-service-save"]
+          }
+        ],
+        "outputStepId": "saveDraft"
+      },
+      "successRule": {
+        "kind": "http_status_and_output",
+        "outputRequired": true,
+        "forbiddenOutputKeys": ["error", "errors"],
+        "requiredOutputPaths": [["draftId"]],
+        "evidenceRefs": ["ev-contract-save", "ev-service-save", "ev-contract-errors"]
+      },
+      "errorContract": {
+        "format": "structured",
+        "preservesRecoveryContext": true,
+        "codePath": ["code"],
+        "messagePath": ["message"],
+        "detailsPath": ["details"],
+        "retryabilityPath": ["retryable"],
+        "defaultRetryable": false,
+        "evidenceRefs": ["ev-contract-errors"]
+      },
+      "operationPolicy": {
+        "sideEffect": "update",
+        "idempotency": "idempotent",
+        "automaticRetry": "never",
+        "confirmation": "not-required",
+        "unknownOutcome": "stop-and-reconcile"
+      },
+      "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": true},
+      "sideEffect": "update",
+      "runtimeProtection": {
+        "mode": "backend-authoritative",
+        "owner": "target-api",
+        "evidenceRefs": ["ev-service-save", "ev-service-auth", "ev-contract-errors"]
+      },
+      "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "unknown-outcome-reconciliation"],
+      "evidenceCoverage": {
+        "sideEffect": {"declaredSideEffect": "update", "assertionLevel": "fact", "evidenceRefs": ["ev-service-save"]},
+        "backendContract": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-save"]},
+        "authorization": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-auth"]},
+        "validation": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-save"]},
+        "idempotency": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-save-idempotency"]},
+        "unknownOutcome": {"assertionLevel": "fact", "evidenceRefs": ["ev-contract-errors"]}
+      },
+      "verificationChecks": ["client-observed-save-boundary", "backend-validation-error-is-structured", "ordinary-write-does-not-require-preflight", "ambiguous-save-does-not-auto-retry"],
+      "evidenceRefs": ["ev-client-save-call", "ev-client-save-request", "ev-contract-save", "ev-service-save", "ev-service-save-idempotency", "ev-service-auth", "ev-contract-errors"]
     },
     {
       "capabilityId": "submit-sample-request",
@@ -387,19 +770,25 @@
       "authentication": "runtime_context",
       "readiness": "ready",
       "missingEvidence": [],
+      "exposure": {
+        "kind": "client-request",
+        "evidenceRefs": ["ev-client-submit-call"],
+        "supplementalEvidenceRefs": ["ev-contract-submit", "ev-service-submit", "ev-service-submit-idempotency", "ev-service-validation", "ev-service-auth", "ev-contract-errors", "ev-tests-workflow"]
+      },
       "inputs": [
-        {"name": "requestData", "description": "The exact request data previously validated.", "type": "object", "required": true, "informationClass": "required", "sourceStrategies": ["user", "trusted-host-context"], "valueDomain": {"kind": "unconstrained"}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"refreshWhen": ["user-edited"]}, "evidenceRefs": ["ev-service-validation", "ev-service-submit"]},
-        {"name": "validationGrant", "description": "Opaque validation grant bound to subject, session, target, and payload digest.", "type": "object", "required": true, "informationClass": "derived", "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "validate-sample-request", "outputPath": ["validationGrant"]}], "valueDomain": {"kind": "dynamic", "sourceCapabilityId": "validate-sample-request", "sourcePath": ["validationGrant"], "freshness": {"ttlSeconds": 120, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 120, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-service-validation"]},
-        {"name": "confirmationGrant", "description": "Single-use trusted confirmation bound to the same subject, session, target, payload digest, and validation grant.", "type": "object", "required": true, "informationClass": "derived", "sourceStrategies": ["trusted-host-context"], "valueDomain": {"kind": "unconstrained"}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 60, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-tests-workflow"]}
+        {"name": "requestData", "description": "The exact request data previously validated.", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"subject": {"type": "string"}, "note": {"type": "string"}}, "required": ["subject"]}, "required": true, "informationClass": "required", "sourceStrategies": ["user"], "valueDomain": {"kind": "unconstrained"}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"refreshWhen": ["user-edited"]}, "evidenceRefs": ["ev-service-validation", "ev-service-submit"]},
+        {"name": "validationGrant", "description": "Opaque validation grant bound to subject, session, target, and payload digest.", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "payloadDigest": {"type": "string"}}, "required": ["grantId", "payloadDigest"]}, "required": true, "informationClass": "derived", "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "validate-sample-request", "outputPath": ["validationGrant"], "mappingKind": "direct"}], "valueDomain": {"kind": "dynamic", "sourceCapabilityId": "validate-sample-request", "sourcePath": ["validationGrant"], "mappingKind": "direct", "identityScoped": true, "tenantScoped": false, "sessionScoped": true, "freshness": {"ttlSeconds": 120, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-validation", "ev-service-validation"]}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 120, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-validation", "ev-service-validation"]},
+        {"name": "confirmationGrant", "description": "Single-use trusted confirmation bound to the same subject, session, target, payload digest, and validation grant.", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "validationGrantId": {"type": "string"}, "payloadDigest": {"type": "string"}}, "required": ["grantId", "validationGrantId", "payloadDigest"]}, "required": true, "informationClass": "derived", "sourceStrategies": [{"kind": "trusted-host-context", "requirementId": "trusted-confirmation"}], "valueDomain": {"kind": "unconstrained"}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 60, "refreshWhen": ["payload-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-tests-workflow"]},
+        {"name": "attachmentGrants", "description": "Source-proven uploaded attachment results bound into validation and final submission when present.", "type": "array", "schema": {"type": "array", "items": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "uploadResult": {"type": "string"}}, "required": ["grantId", "uploadResult"]}}, "required": false, "informationClass": "optional", "sourceStrategies": [{"kind": "upstream-tool", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array"}], "valueDomain": {"kind": "dynamic", "sourceCapabilityId": "upload-sample-attachment", "sourcePath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array", "identityScoped": true, "tenantScoped": false, "sessionScoped": true, "freshness": {"ttlSeconds": 300, "refreshWhen": ["subject-changed", "session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-contract-attachment", "ev-service-attachment"]}, "requiredWhen": [], "forbiddenWhen": [], "freshness": {"ttlSeconds": 300, "refreshWhen": ["session-changed", "expired", "consumed"]}, "evidenceRefs": ["ev-service-attachment", "ev-service-submit"]}
       ],
       "outputs": [
-        {"path": ["requestId"], "description": "Stable identifier returned only after a confirmed dispatch result.", "evidenceRefs": ["ev-service-submit"]}
+        {"path": ["requestId"], "type": "string", "description": "Stable identifier returned only after a confirmed dispatch result.", "valueDomain": {"kind": "unconstrained"}, "evidenceRefs": ["ev-contract-submit", "ev-service-submit"]}
       ],
       "constraints": [
         {"constraintId": "submitted-payload-equals-validated-payload", "kind": "cross-field", "left": {"source": "canonicalDigest", "path": ["requestData"]}, "operator": "equals", "right": {"source": "validationGrant", "path": ["payloadDigest"]}, "enforcement": "runtime-before-dispatch", "evidenceRefs": ["ev-service-validation", "ev-tests-workflow"]},
         {"constraintId": "confirmation-bound-to-validation", "kind": "grant-binding", "fields": ["subject", "session", "target", "payloadDigest", "validationGrantId"], "enforcement": "runtime-before-dispatch", "evidenceRefs": ["ev-tests-workflow"]}
       ],
-      "attachments": {"mode": "opaque-upload-results", "forbiddenInputs": ["local-path", "unverified-url"], "enforcedByWorkflow": "submit-sample-request"},
+      "attachments": {"mode": "business-upload-results", "forbiddenInputs": ["local-path", "unverified-url"], "consumerBindings": [{"inputName": "attachmentGrants", "providerCapabilityId": "upload-sample-attachment", "providerOutputPath": ["uploadedAttachmentGrant"], "mappingKind": "append-to-array", "evidenceRefs": ["ev-service-attachment", "ev-service-submit"]}], "enforcedByWorkflow": "submit-sample-request"},
       "workflowId": "submit-sample-request",
       "implementation": {
         "kind": "http",
@@ -411,10 +800,11 @@
             "url": "https://application.example/api/sample-request",
             "headers": {"accept": "application/json", "content-type": "application/json"},
             "bindings": [
-              {"source": {"kind": "input", "inputName": "requestData"}, "location": "body", "path": ["requestData"], "evidenceRefs": ["ev-service-submit"]}
+              {"source": {"kind": "input", "inputName": "requestData"}, "location": "body", "path": ["requestData"], "evidenceRefs": ["ev-client-submit-request", "ev-contract-submit"]},
+              {"source": {"kind": "input", "inputName": "attachmentGrants"}, "location": "body", "path": ["attachmentGrants"], "evidenceRefs": ["ev-client-submit-request", "ev-contract-submit"]}
             ],
             "successStatusCodes": [201],
-            "evidenceRefs": ["ev-service-submit"]
+            "evidenceRefs": ["ev-client-submit-request", "ev-contract-submit", "ev-service-submit"]
           }
         ],
         "outputStepId": "submitRequest"
@@ -424,7 +814,17 @@
         "outputRequired": true,
         "forbiddenOutputKeys": ["error", "errors"],
         "requiredOutputPaths": [["requestId"]],
-        "evidenceRefs": ["ev-service-submit", "ev-contract-errors"]
+        "evidenceRefs": ["ev-contract-submit", "ev-service-submit", "ev-contract-errors"]
+      },
+      "errorContract": {
+        "format": "structured",
+        "preservesRecoveryContext": true,
+        "codePath": ["code"],
+        "messagePath": ["message"],
+        "detailsPath": ["details"],
+        "retryabilityPath": ["retryable"],
+        "defaultRetryable": false,
+        "evidenceRefs": ["ev-contract-errors"]
       },
       "operationPolicy": {
         "sideEffect": "create",
@@ -433,35 +833,45 @@
         "confirmation": "trusted-confirmation-required",
         "unknownOutcome": "stop-and-reconcile"
       },
+      "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
       "sideEffect": "create",
+      "runtimeProtection": {
+        "mode": "deterministic-workflow",
+        "workflowId": "submit-sample-request",
+        "evidenceRefs": ["ev-service-submit", "ev-tests-workflow"]
+      },
       "hostRequirements": ["agent-skills-discovery", "mcp-tool-invocation", "authentication-injection", "trusted-confirmation", "session-state", "unknown-outcome-reconciliation"],
       "evidenceCoverage": {
+        "sideEffect": {"declaredSideEffect": "create", "assertionLevel": "fact", "evidenceRefs": ["ev-service-submit"]},
         "backendContract": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-submit"]},
         "authorization": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-auth"]},
         "validation": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-validation"]},
-        "idempotency": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-submit"]},
+        "idempotency": {"assertionLevel": "fact", "evidenceRefs": ["ev-service-submit-idempotency"]},
         "unknownOutcome": {"assertionLevel": "fact", "evidenceRefs": ["ev-contract-errors"]}
       },
-      "verificationChecks": ["reject-unvalidated-before-dispatch", "reject-unconfirmed-before-dispatch", "reject-digest-mismatch-before-dispatch", "reject-expired-wrong-subject-wrong-session-or-reused-grants", "unknown-submit-outcome-does-not-auto-retry"],
-      "evidenceRefs": ["ev-service-submit", "ev-service-auth", "ev-tests-workflow"]
+      "verificationChecks": ["reject-unvalidated-before-dispatch", "reject-unconfirmed-before-dispatch", "reject-digest-mismatch-before-dispatch", "reject-expired-wrong-subject-wrong-session-or-reused-grants", "attachment-upload-result-reaches-final-request", "unknown-submit-outcome-does-not-auto-retry"],
+      "evidenceRefs": ["ev-client-submit-request", "ev-contract-submit", "ev-service-submit", "ev-service-submit-idempotency", "ev-service-validation", "ev-service-auth", "ev-contract-errors", "ev-tests-workflow"]
     }
   ],
   "handoffs": [
-    {"fromCapabilityId": "list-sample-request-kinds", "toCapabilityId": "validate-sample-request", "mappings": [{"sourcePath": ["options", "*", "selectionGrant"], "targetInput": "selectionGrant"}], "required": true, "evidenceRefs": ["ev-service-selection"]},
-    {"fromCapabilityId": "upload-sample-attachment", "toCapabilityId": "validate-sample-request", "mappings": [{"sourcePath": ["uploadedAttachmentGrant"], "targetInput": "attachmentGrants"}], "required": false, "evidenceRefs": ["ev-service-attachment", "ev-service-validation"]},
-    {"fromCapabilityId": "validate-sample-request", "toCapabilityId": "submit-sample-request", "mappings": [{"sourcePath": ["validationGrant"], "targetInput": "validationGrant"}], "required": true, "evidenceRefs": ["ev-service-validation", "ev-service-submit"]}
+    {"fromCapabilityId": "list-sample-request-kinds", "toCapabilityId": "validate-sample-request", "mappings": [{"sourcePath": ["options", "*", "selectionGrant"], "targetInput": "selectionGrant", "mappingKind": "select-one"}], "required": true, "evidenceRefs": ["ev-service-selection"]},
+    {"fromCapabilityId": "upload-sample-attachment", "toCapabilityId": "validate-sample-request", "mappings": [{"sourcePath": ["uploadedAttachmentGrant"], "targetInput": "attachmentGrants", "mappingKind": "append-to-array"}], "required": false, "evidenceRefs": ["ev-service-attachment", "ev-service-validation"]},
+    {"fromCapabilityId": "validate-sample-request", "toCapabilityId": "submit-sample-request", "mappings": [{"sourcePath": ["validationGrant"], "targetInput": "validationGrant", "mappingKind": "direct"}], "required": true, "evidenceRefs": ["ev-service-validation", "ev-service-submit"]},
+    {"fromCapabilityId": "upload-sample-attachment", "toCapabilityId": "submit-sample-request", "mappings": [{"sourcePath": ["uploadedAttachmentGrant"], "targetInput": "attachmentGrants", "mappingKind": "append-to-array"}], "required": false, "evidenceRefs": ["ev-service-attachment", "ev-service-submit"]}
   ],
   "capabilityGraph": {
     "nodes": [
       {"capabilityId": "list-sample-request-kinds", "independentValue": "Answer which current options are available."},
       {"capabilityId": "upload-sample-attachment", "independentValue": "Prepare one approved attachment for later use."},
       {"capabilityId": "validate-sample-request", "independentValue": "Explain whether the collected information is ready."},
+      {"capabilityId": "save-sample-draft", "independentValue": "Save known information and surface authoritative backend validation errors without a synthetic preflight."},
       {"capabilityId": "submit-sample-request", "independentValue": "Create one confirmed request."}
     ],
     "edges": [
       {"fromCapabilityId": "list-sample-request-kinds", "toCapabilityId": "validate-sample-request", "kind": "handoff", "composition": "observed", "required": true},
       {"fromCapabilityId": "upload-sample-attachment", "toCapabilityId": "validate-sample-request", "kind": "conditional-handoff", "composition": "observed", "required": false},
       {"fromCapabilityId": "validate-sample-request", "toCapabilityId": "submit-sample-request", "kind": "hard-precondition", "composition": "observed", "required": true},
+      {"fromCapabilityId": "upload-sample-attachment", "toCapabilityId": "submit-sample-request", "kind": "conditional-handoff", "composition": "observed", "required": false},
       {"fromCapabilityId": "list-sample-request-kinds", "toCapabilityId": "upload-sample-attachment", "kind": "optional-planning", "composition": "derived", "required": false}
     ]
   },
@@ -470,30 +880,47 @@
       "goalId": "prepare-sample-request",
       "intent": "Collect and validate enough current information without submitting.",
       "informationNeeds": [
-        {"informationId": "current-selection", "classification": "dynamic", "satisfiedBy": [{"kind": "capability", "capabilityId": "list-sample-request-kinds", "outputPath": ["options", "*", "selectionGrant"]}], "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true}},
-        {"informationId": "request-data", "classification": "required", "satisfiedBy": [{"kind": "user"}, {"kind": "trusted-host-context"}], "reuseWhile": {"notEdited": true}},
-        {"informationId": "approved-attachments", "classification": "requiredWhen", "condition": {"path": ["current-selection", "requiresAttachment"], "operator": "equals", "value": true}, "satisfiedBy": [{"kind": "capability", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"]}], "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true, "notConsumed": true}}
+        {"informationId": "current-selection", "classification": "dynamic", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "requiresAttachment": {"type": "boolean"}, "allowsAttachment": {"type": "boolean"}}, "required": ["grantId", "requiresAttachment", "allowsAttachment"]}, "satisfiedBy": [{"kind": "capability", "capabilityId": "list-sample-request-kinds", "outputPath": ["options", "*", "selectionGrant"]}], "supplies": [{"capabilityId": "validate-sample-request", "inputName": "selectionGrant", "mappingKind": "direct"}], "reuseWhile": {"sameSubject": true, "sameTenant": true, "sameSession": true, "notExpired": true, "evidenceRefs": ["ev-contract-catalog", "ev-service-selection"]}},
+        {"informationId": "request-data", "classification": "required", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"subject": {"type": "string"}, "note": {"type": "string"}}, "required": ["subject"]}, "satisfiedBy": [{"kind": "user"}], "supplies": [{"capabilityId": "validate-sample-request", "inputName": "requestData", "mappingKind": "direct"}], "reuseWhile": {"notEdited": true, "evidenceRefs": ["ev-client-validate-request"]}},
+        {"informationId": "attachment-source", "classification": "requiredWhen", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "fileName": {"type": "string"}, "mediaType": {"type": "string"}, "sizeBytes": {"type": "integer", "minimum": 0, "maximum": 1048576}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}, "required": ["grantId", "fileName", "mediaType", "sizeBytes", "sha256"]}, "condition": {"path": ["current-selection", "requiresAttachment"], "operator": "equals", "value": true, "evidenceRefs": ["ev-service-selection"]}, "satisfiedBy": [{"kind": "trusted-host-context", "requirementId": "attachment-resolution"}], "supplies": [{"capabilityId": "upload-sample-attachment", "inputName": "hostAttachmentGrant", "mappingKind": "direct"}], "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true, "evidenceRefs": ["ev-contract-attachment"]}},
+        {"informationId": "approved-attachments", "classification": "requiredWhen", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "uploadResult": {"type": "string"}}, "required": ["grantId", "uploadResult"]}, "condition": {"path": ["current-selection", "requiresAttachment"], "operator": "equals", "value": true, "evidenceRefs": ["ev-service-selection"]}, "satisfiedBy": [{"kind": "capability", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"]}], "supplies": [{"capabilityId": "validate-sample-request", "inputName": "attachmentGrants", "mappingKind": "append-to-array"}], "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true, "notConsumed": true, "evidenceRefs": ["ev-contract-attachment", "ev-service-upload-idempotency"]}},
+        {"informationId": "validation-result", "classification": "derived", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "payloadDigest": {"type": "string"}}, "required": ["grantId", "payloadDigest"]}, "satisfiedBy": [{"kind": "capability", "capabilityId": "validate-sample-request", "outputPath": ["validationGrant"]}], "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true, "evidenceRefs": ["ev-contract-validation", "ev-service-validation"]}}
       ],
-      "completionPredicate": {"operator": "all-satisfied", "informationIds": ["current-selection", "request-data", "approved-attachments"], "conditionalNeedsOnlyWhenActive": true},
+      "completionPredicate": {"operator": "all-satisfied", "informationIds": ["current-selection", "request-data", "attachment-source", "approved-attachments", "validation-result"], "conditionalNeedsOnlyWhenActive": true},
       "requiredCapabilityIds": ["list-sample-request-kinds", "validate-sample-request"],
       "conditionalCapabilityIds": ["upload-sample-attachment"],
       "optionalCapabilityIds": ["upload-sample-attachment"],
-      "agentPolicy": {"acceptInformationInAnyOrder": true, "reuseFreshInformation": true, "askOnlyCurrentlyMissing": true, "skipUnnecessaryCapabilities": true, "stopWhenPredicateSatisfied": true},
-      "hardConstraints": ["dynamic-selection-must-be-current", "derived-values-must-come-from-declared-source"]
+      "agentPolicy": {"acceptInformationInAnyOrder": true, "reuseFreshInformation": true, "askOnlyCurrentlyMissing": true, "skipUnnecessaryCapabilities": true, "stopWhenPredicateSatisfied": true}
+    },
+    {
+      "goalId": "save-sample-draft",
+      "intent": "Persist the currently known draft fields and let the backend report any ordinary business correction that is still needed.",
+      "informationNeeds": [
+        {"informationId": "draft-request-data", "classification": "required", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"subject": {"type": "string"}, "note": {"type": "string"}}, "required": ["subject"]}, "satisfiedBy": [{"kind": "user"}], "supplies": [{"capabilityId": "save-sample-draft", "inputName": "requestData", "mappingKind": "direct"}], "reuseWhile": {"notEdited": true, "evidenceRefs": ["ev-client-save-request"]}},
+        {"informationId": "saved-draft", "classification": "derived", "type": "string", "satisfiedBy": [{"kind": "capability", "capabilityId": "save-sample-draft", "outputPath": ["draftId"]}], "reuseWhile": {"sameSubject": true, "notEdited": true, "evidenceRefs": ["ev-contract-save", "ev-service-save-idempotency"]}}
+      ],
+      "completionPredicate": {"operator": "all-satisfied", "informationIds": ["draft-request-data", "saved-draft"]},
+      "requiredCapabilityIds": ["save-sample-draft"],
+      "conditionalCapabilityIds": [],
+      "optionalCapabilityIds": [],
+      "agentPolicy": {"acceptInformationInAnyOrder": true, "reuseFreshInformation": true, "askOnlyCurrentlyMissing": true, "skipUnnecessaryCapabilities": true, "stopWhenPredicateSatisfied": true}
     },
     {
       "goalId": "submit-sample-request",
       "intent": "Create one request after information, validation, and trusted confirmation are complete.",
       "informationNeeds": [
-        {"informationId": "validated-payload", "classification": "derived", "satisfiedBy": [{"kind": "capability", "capabilityId": "validate-sample-request", "outputPath": ["validationGrant"]}], "reuseWhile": {"sameSubject": true, "sameSession": true, "samePayloadDigest": true, "notExpired": true, "notConsumed": true}},
-        {"informationId": "trusted-confirmation", "classification": "derived", "satisfiedBy": [{"kind": "trusted-host-context"}], "reuseWhile": {"sameSubject": true, "sameSession": true, "samePayloadDigest": true, "notExpired": true, "notConsumed": true}}
+        {"informationId": "current-selection", "classification": "dynamic", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "requiresAttachment": {"type": "boolean"}, "allowsAttachment": {"type": "boolean"}}, "required": ["grantId", "requiresAttachment", "allowsAttachment"]}, "satisfiedBy": [{"kind": "capability", "capabilityId": "list-sample-request-kinds", "outputPath": ["options", "*", "selectionGrant"]}], "supplies": [{"capabilityId": "validate-sample-request", "inputName": "selectionGrant", "mappingKind": "direct"}], "reuseWhile": {"sameSubject": true, "sameTenant": true, "sameSession": true, "notExpired": true, "evidenceRefs": ["ev-contract-catalog", "ev-service-selection"]}},
+        {"informationId": "request-data", "classification": "required", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"subject": {"type": "string"}, "note": {"type": "string"}}, "required": ["subject"]}, "satisfiedBy": [{"kind": "user"}], "supplies": [{"capabilityId": "validate-sample-request", "inputName": "requestData", "mappingKind": "direct"}, {"capabilityId": "submit-sample-request", "inputName": "requestData", "mappingKind": "direct"}], "reuseWhile": {"notEdited": true, "evidenceRefs": ["ev-client-submit-request"]}},
+        {"informationId": "attachment-source", "classification": "requiredWhen", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "fileName": {"type": "string"}, "mediaType": {"type": "string"}, "sizeBytes": {"type": "integer", "minimum": 0, "maximum": 1048576}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}, "required": ["grantId", "fileName", "mediaType", "sizeBytes", "sha256"]}, "condition": {"path": ["current-selection", "requiresAttachment"], "operator": "equals", "value": true, "evidenceRefs": ["ev-service-selection"]}, "satisfiedBy": [{"kind": "trusted-host-context", "requirementId": "attachment-resolution"}], "supplies": [{"capabilityId": "upload-sample-attachment", "inputName": "hostAttachmentGrant", "mappingKind": "direct"}], "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true, "evidenceRefs": ["ev-contract-attachment"]}},
+        {"informationId": "approved-attachments", "classification": "requiredWhen", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "uploadResult": {"type": "string"}}, "required": ["grantId", "uploadResult"]}, "condition": {"path": ["current-selection", "requiresAttachment"], "operator": "equals", "value": true, "evidenceRefs": ["ev-service-selection"]}, "satisfiedBy": [{"kind": "capability", "capabilityId": "upload-sample-attachment", "outputPath": ["uploadedAttachmentGrant"]}], "supplies": [{"capabilityId": "validate-sample-request", "inputName": "attachmentGrants", "mappingKind": "append-to-array"}, {"capabilityId": "submit-sample-request", "inputName": "attachmentGrants", "mappingKind": "append-to-array"}], "reuseWhile": {"sameSubject": true, "sameSession": true, "notExpired": true, "notConsumed": true, "evidenceRefs": ["ev-contract-attachment", "ev-service-upload-idempotency"]}},
+        {"informationId": "validated-payload", "classification": "derived", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "payloadDigest": {"type": "string"}}, "required": ["grantId", "payloadDigest"]}, "satisfiedBy": [{"kind": "capability", "capabilityId": "validate-sample-request", "outputPath": ["validationGrant"]}], "supplies": [{"capabilityId": "submit-sample-request", "inputName": "validationGrant", "mappingKind": "direct"}], "reuseWhile": {"sameSubject": true, "sameSession": true, "samePayloadDigest": true, "notExpired": true, "notConsumed": true, "evidenceRefs": ["ev-contract-validation", "ev-service-validation", "ev-tests-workflow"]}},
+        {"informationId": "trusted-confirmation", "classification": "derived", "type": "object", "schema": {"type": "object", "additionalProperties": false, "properties": {"grantId": {"type": "string"}, "validationGrantId": {"type": "string"}, "payloadDigest": {"type": "string"}}, "required": ["grantId", "validationGrantId", "payloadDigest"]}, "satisfiedBy": [{"kind": "trusted-host-context", "requirementId": "trusted-confirmation"}], "supplies": [{"capabilityId": "submit-sample-request", "inputName": "confirmationGrant", "mappingKind": "direct"}], "reuseWhile": {"sameSubject": true, "sameSession": true, "samePayloadDigest": true, "notExpired": true, "notConsumed": true, "evidenceRefs": ["ev-tests-workflow"]}}
       ],
       "completionPredicate": {"operator": "workflow-completed", "workflowId": "submit-sample-request"},
-      "requiredCapabilityIds": ["validate-sample-request", "submit-sample-request"],
+      "requiredCapabilityIds": ["list-sample-request-kinds", "validate-sample-request", "submit-sample-request"],
       "conditionalCapabilityIds": ["upload-sample-attachment"],
-      "optionalCapabilityIds": ["list-sample-request-kinds", "upload-sample-attachment"],
-      "agentPolicy": {"acceptInformationInAnyOrder": true, "reuseFreshInformation": true, "askOnlyCurrentlyMissing": true, "skipUnnecessaryCapabilities": true, "stopWhenPredicateSatisfied": true},
-      "hardConstraints": ["payload-equals-validated-payload", "trusted-confirmation-before-dispatch", "at-most-once-dispatch", "unknown-outcome-stop-and-reconcile"]
+      "optionalCapabilityIds": ["upload-sample-attachment"],
+      "agentPolicy": {"acceptInformationInAnyOrder": true, "reuseFreshInformation": true, "askOnlyCurrentlyMissing": true, "skipUnnecessaryCapabilities": true, "stopWhenPredicateSatisfied": true}
     }
   ],
   "consumerRequirements": {
@@ -504,7 +931,6 @@
       {"requirementId": "trusted-confirmation", "hostCapability": "trustedConfirmation", "description": "Issue confirmation bound to subject, session, target, payload digest, validation grant, expiry, and single use.", "onMissing": "disable"},
       {"requirementId": "session-state", "hostCapability": "sessionState", "description": "Retain and consume protected grants within an isolated session.", "onMissing": "disable"},
       {"requirementId": "attachment-resolution", "hostCapability": "attachmentResolution", "description": "Resolve only user-approved attachment references and bounded metadata or content.", "onMissing": "requires-host-integration"},
-      {"requirementId": "secure-upload", "hostCapability": "secureUpload", "description": "Upload bounded content without accepting arbitrary local file paths.", "onMissing": "disable"},
       {"requirementId": "unknown-outcome-reconciliation", "hostCapability": "unknownOutcomeReconciliation", "description": "Reconcile an uncertain write result before any later attempt.", "onMissing": "disable"}
     ]
   },
@@ -512,19 +938,47 @@
     {
       "workflowId": "upload-sample-attachment",
       "kind": "deterministic-write-guard",
-      "guardAsset": "portable-workflow-guard.mjs#dispatchUploadOnce",
+      "guardAsset": "portable-workflow-guard.mjs#dispatchWithPolicy",
       "entryCapabilityId": "upload-sample-attachment",
-      "bindings": ["subject", "session", "target", "attachmentGrantId", "fileName", "mediaType", "sizeBytes", "sha256", "confirmationGrantId", "expiresAt", "singleUse"],
+      "capabilityIds": [
+        "upload-sample-attachment"
+      ],
+      "bindings": [
+        {"name": "subject", "actualSource": {"kind": "runtime-context", "claim": "subject", "requirementId": "authentication-injection", "path": ["subjectId"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["subject"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-attachment", "ev-tests-workflow"]},
+        {"name": "session", "actualSource": {"kind": "runtime-context", "claim": "session", "requirementId": "session-state", "path": ["sessionId"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["session"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-attachment", "ev-tests-workflow"]},
+        {"name": "target", "actualSource": {"kind": "constant", "value": "upload-sample-attachment"}, "expectedSource": {"kind": "constant", "value": "upload-sample-attachment"}, "comparator": "json-equals", "evidenceRefs": ["ev-client-upload-call"]},
+        {"name": "attachmentGrantId", "actualSource": {"kind": "capability-input", "inputName": "hostAttachmentGrant", "path": ["grantId"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["attachmentGrantId"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-attachment", "ev-tests-workflow"]},
+        {"name": "fileName", "actualSource": {"kind": "capability-input", "inputName": "hostAttachmentGrant", "path": ["fileName"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["fileName"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-attachment"]},
+        {"name": "mediaType", "actualSource": {"kind": "capability-input", "inputName": "hostAttachmentGrant", "path": ["mediaType"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["mediaType"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-attachment"]},
+        {"name": "sizeBytes", "actualSource": {"kind": "capability-input", "inputName": "hostAttachmentGrant", "path": ["sizeBytes"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["sizeBytes"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-attachment"]},
+        {"name": "sha256", "actualSource": {"kind": "capability-input", "inputName": "hostAttachmentGrant", "path": ["sha256"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["sha256"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-attachment"]},
+        {"name": "confirmationGrantId", "actualSource": {"kind": "runtime-context", "claim": "confirmation", "requirementId": "trusted-confirmation", "path": ["confirmationGrantId"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["confirmationGrantId"]}, "comparator": "json-equals", "evidenceRefs": ["ev-tests-workflow"]},
+        {"name": "expiresAt", "actualSource": {"kind": "runtime-context", "claim": "expiry", "requirementId": "session-state", "path": ["expiresAt"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["expiresAt"]}, "comparator": "json-equals", "evidenceRefs": ["ev-tests-workflow"]},
+        {"name": "singleUse", "actualSource": {"kind": "constant", "value": true}, "expectedSource": {"kind": "constant", "value": true}, "comparator": "json-equals", "evidenceRefs": ["ev-tests-workflow"]}
+      ],
       "enforcement": {"owner": "mcp-session-runtime", "mustCompleteBeforeDispatch": true, "rejectWithoutDispatch": true},
       "unknownOutcomePolicy": "stop-and-reconcile-before-any-new-attempt",
-      "verificationChecks": ["missing-attachment-grant-causes-zero-dispatch", "local-path-causes-zero-dispatch", "metadata-or-hash-mismatch-causes-zero-dispatch", "missing-upload-confirmation-causes-zero-dispatch", "expired-grant-causes-zero-dispatch", "wrong-subject-causes-zero-dispatch", "wrong-session-causes-zero-dispatch", "reused-grant-causes-zero-dispatch", "unknown-upload-outcome-does-not-auto-retry"]
+      "verificationChecks": ["missing-attachment-grant-causes-zero-dispatch", "unresolved-attachment-causes-zero-dispatch", "local-path-causes-zero-dispatch", "metadata-or-hash-mismatch-causes-zero-dispatch", "missing-upload-confirmation-causes-zero-dispatch", "expired-grant-causes-zero-dispatch", "wrong-subject-causes-zero-dispatch", "wrong-session-causes-zero-dispatch", "reused-grant-causes-zero-dispatch", "unknown-upload-outcome-does-not-auto-retry"]
     },
     {
       "workflowId": "submit-sample-request",
       "kind": "deterministic-write-guard",
-      "guardAsset": "portable-workflow-guard.mjs",
+      "guardAsset": "portable-workflow-guard.mjs#dispatchWithPolicy",
       "entryCapabilityId": "submit-sample-request",
-      "bindings": ["subject", "session", "target", "payloadDigest", "validationGrantId", "attachmentGrantIds", "confirmationGrantId", "expiresAt", "singleUse"],
+      "capabilityIds": [
+        "submit-sample-request"
+      ],
+      "bindings": [
+        {"name": "subject", "actualSource": {"kind": "runtime-context", "claim": "subject", "requirementId": "authentication-injection", "path": ["subjectId"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["subject"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-submit", "ev-tests-workflow"]},
+        {"name": "session", "actualSource": {"kind": "runtime-context", "claim": "session", "requirementId": "session-state", "path": ["sessionId"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["session"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-submit", "ev-tests-workflow"]},
+        {"name": "target", "actualSource": {"kind": "constant", "value": "submit-sample-request"}, "expectedSource": {"kind": "constant", "value": "submit-sample-request"}, "comparator": "json-equals", "evidenceRefs": ["ev-client-submit-call"]},
+        {"name": "payloadDigest", "actualSource": {"kind": "derived-calculation", "algorithm": "canonical-json-sha256", "inputName": "requestData"}, "expectedSource": {"kind": "protected-runtime-state", "path": ["payloadDigest"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-validation", "ev-tests-workflow"]},
+        {"name": "validationGrantId", "actualSource": {"kind": "capability-input", "inputName": "validationGrant", "path": ["grantId"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["validationGrantId"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-validation", "ev-tests-workflow"]},
+        {"name": "attachmentGrantIds", "actualSource": {"kind": "derived-calculation", "algorithm": "ordered-id-list", "inputName": "attachmentGrants", "path": ["*", "grantId"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["attachmentGrantIds"]}, "comparator": "json-equals", "evidenceRefs": ["ev-service-attachment", "ev-tests-workflow"]},
+        {"name": "confirmationGrantId", "actualSource": {"kind": "capability-input", "inputName": "confirmationGrant", "path": ["grantId"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["confirmationGrantId"]}, "comparator": "json-equals", "evidenceRefs": ["ev-tests-workflow"]},
+        {"name": "expiresAt", "actualSource": {"kind": "runtime-context", "claim": "expiry", "requirementId": "session-state", "path": ["expiresAt"]}, "expectedSource": {"kind": "protected-runtime-state", "path": ["expiresAt"]}, "comparator": "json-equals", "evidenceRefs": ["ev-tests-workflow"]},
+        {"name": "singleUse", "actualSource": {"kind": "constant", "value": true}, "expectedSource": {"kind": "constant", "value": true}, "comparator": "json-equals", "evidenceRefs": ["ev-tests-workflow"]}
+      ],
       "enforcement": {"owner": "mcp-session-runtime", "mustCompleteBeforeDispatch": true, "rejectWithoutDispatch": true},
       "unknownOutcomePolicy": "stop-and-reconcile-before-any-new-attempt",
       "verificationChecks": ["missing-validation-grant-causes-zero-dispatch", "missing-confirmation-grant-causes-zero-dispatch", "payload-mismatch-causes-zero-dispatch", "expired-grant-causes-zero-dispatch", "wrong-subject-causes-zero-dispatch", "wrong-session-causes-zero-dispatch", "reused-grant-causes-zero-dispatch", "unapproved-attachment-causes-zero-dispatch"]

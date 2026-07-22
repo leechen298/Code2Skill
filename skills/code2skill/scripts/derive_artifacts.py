@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -12,8 +13,10 @@ from contract_model import (
     ContractError,
     derive_bundle,
     derive_consumer_requirements,
+    derive_documentation_contract,
     derive_goal_contract,
     derive_host_compatibility,
+    derive_schema_contract,
     derive_verification_matrix,
     validate_canonical_contract,
     validate_source_topology,
@@ -157,14 +160,21 @@ def derive_draft(
                 if not isinstance(binding, dict):
                     continue
                 source_value = binding.get("source")
-                if not isinstance(source_value, dict) or source_value.get("kind") != "input":
+                if not isinstance(source_value, dict) or source_value.get("kind") not in {
+                    "input",
+                    "host_resolved_attachment",
+                }:
                     continue
-                mappings.append({
+                mapping = {
                     "inputName": source_value.get("inputName"),
                     "target": binding.get("location"),
                     "targetPath": ".".join(str(segment) for segment in binding.get("path", [])),
                     "evidenceRefs": evidence(binding.get("evidenceRefs"), step_refs),
-                })
+                }
+                if source_value.get("kind") == "host_resolved_attachment":
+                    mapping["sourceKind"] = "host-resolved-attachment"
+                    mapping["requirementId"] = source_value.get("requirementId")
+                mappings.append(mapping)
             request_chain.append({
                 "stepId": f"{tool}.{step.get('stepId')}",
                 "order": order,
@@ -216,6 +226,8 @@ def derive_vnext(root: Path) -> list[str]:
     consumer_requirements = derive_consumer_requirements(contract)
     compatibility = derive_host_compatibility(contract, consumer_requirements, host_profile)
     verification_matrix = derive_verification_matrix(contract, compatibility)
+    schema_contract = derive_schema_contract(contract)
+    documentation_contract = derive_documentation_contract(contract)
 
     write_json(root / "capability-bundle.json", bundle)
     write_json(root / "function-core" / "capability-bundle.json", bundle)
@@ -224,6 +236,9 @@ def derive_vnext(root: Path) -> list[str]:
     write_json(root / "consumer-requirements.json", consumer_requirements)
     write_json(root / "host-compatibility-report.json", compatibility)
     write_json(root / "verification-matrix.json", verification_matrix)
+    write_json(root / "function-core" / "schema-contract.json", schema_contract)
+    write_json(root / "mcp-tool" / "schema-contract.json", schema_contract)
+    write_json(root / "references" / "capability-contracts.json", documentation_contract)
     return [
         "capability-bundle.json",
         "function-core/capability-bundle.json",
@@ -232,6 +247,9 @@ def derive_vnext(root: Path) -> list[str]:
         "consumer-requirements.json",
         "host-compatibility-report.json",
         "verification-matrix.json",
+        "function-core/schema-contract.json",
+        "mcp-tool/schema-contract.json",
+        "references/capability-contracts.json",
     ]
 
 
@@ -246,6 +264,12 @@ def main() -> int:
         except ContractError as error:
             parser.error(str(error))
         print("Derived vNext artifacts: " + ", ".join(generated) + ".")
+        documentation_contract = root / "references" / "capability-contracts.json"
+        documentation_digest = hashlib.sha256(documentation_contract.read_bytes()).hexdigest()
+        print(
+            "Documentation review marker: "
+            f"<!-- code2skill-capability-contract-sha256:{documentation_digest} -->"
+        )
         return 0
 
     bundle = read_json(root / "capability-bundle.json")

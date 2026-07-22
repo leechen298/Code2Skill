@@ -16,7 +16,6 @@
     "kind": "backend-api",
     "identifier": "sample-request"
   },
-  "pageRoute": "/__code2skill__/features/sample-request",
   "allowedRuntimeOrigins": ["https://application.example"],
   "dryRunEnvironmentVariable": "CODE2SKILL_DRY_RUN"
 }

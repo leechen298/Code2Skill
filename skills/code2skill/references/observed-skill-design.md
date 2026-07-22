@@ -1,6 +1,6 @@
 # Observed Skill design
 
-Generate a portable Agent Skill representing how the existing product uses the extracted capabilities. Follow the Agent Skills directory format and keep `SKILL.md` concise, with detailed Feature Context in references.
+Generate a portable Agent Skill representing how the existing product uses the extracted capabilities. Follow the Agent Skills directory format and keep `SKILL.md` concise, with detailed Feature Context in `references/feature-context.md`.
 
 The generated Skill is consumed by an Agent Host that may not have the Producer's code-reading, terminal, filesystem, confirmation, session, or attachment capabilities. Write guidance from the declared Goal Contract, Canonical Contract, and Consumer requirements rather than assuming the generation environment remains present.
 
@@ -22,6 +22,8 @@ The generated Skill must tell an Agent:
 - which missing values can come from trusted Host context or read-only Tools and which must be asked from the user;
 - the completion predicate for each full or partial goal;
 - which Host capabilities are required and how the path degrades when they are absent.
+- how to distinguish a correctable backend business rejection from input, authorization, network, output-contract, and unknown-write-outcome errors;
+- when a source-proven attachment requirement needs a Host-provided attachment, the business upload Tool, and downstream result binding.
 
 ## Progressive information collection
 
@@ -57,8 +59,11 @@ Use the Canonical Contract's capability graph for handoffs and stopping points. 
 - Put trigger terms and usage contexts in frontmatter `description`.
 - Put essential procedure and decision rules in `SKILL.md`.
 - Put detailed Feature Context, field semantics, error catalogs, and examples in `references/`.
+- Always use `references/feature-context.md` for the generated business background; do not generate `PAGE.md` or assume a route exists.
 - Put deterministic reusable checks in `scripts/`.
 - Do not duplicate the same knowledge in several files.
+
+Keep installation and execution states separate. The generated package documents the generic Skill installation command `npx skills add ./generated/code2skill/<feature-id> -a <agent-id> -g -y`, but states that it installs only the Skill. `MCP-SETUP.md` separately describes MCP startup, Host registration, environment variables, authentication injection, and connectivity verification.
 
 ## Origin
 
@@ -79,3 +84,6 @@ An observed Skill fails review when it:
 - repeats a question or lookup when a valid value is already available;
 - assumes the Consumer Host can read source code, resolve local paths, confirm writes, or retain session state without a declared capability;
 - presents a `derived composition` as if it were observed in the source application.
+- tells the Agent that every backend business rejection means the workflow is unusable instead of explaining how to correct information or stop safely;
+- assumes that installing the Skill also starts, registers, authenticates, or verifies the MCP server;
+- assumes the Skill can receive chat attachments or arbitrary local paths instead of requiring a Host-provided approved attachment and a source-proven business upload capability.

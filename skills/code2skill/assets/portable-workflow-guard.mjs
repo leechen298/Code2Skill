@@ -3,6 +3,12 @@ import { createHash, randomUUID } from "node:crypto";
 const LOCAL_PATH = /^(?:file:\/\/|\/|[A-Za-z]:[\\/]|\\\\)/;
 const OPAQUE_HOST_ATTACHMENT = /^(?:opaque|host-attachment):[A-Za-z0-9._~:@-]+$/;
 const SHA256 = /^[a-f0-9]{64}$/;
+const RUNTIME_CONTEXT_CLAIMS = Object.freeze({
+  subject: Object.freeze({ requirementId: "authentication-injection", path: Object.freeze(["subjectId"]) }),
+  session: Object.freeze({ requirementId: "session-state", path: Object.freeze(["sessionId"]) }),
+  confirmation: Object.freeze({ requirementId: "trusted-confirmation", path: Object.freeze(["confirmationGrantId"]) }),
+  expiry: Object.freeze({ requirementId: "session-state", path: Object.freeze(["expiresAt"]) }),
+});
 
 export class GuardViolation extends Error {
   constructor(code, message) {
@@ -10,6 +16,7 @@ export class GuardViolation extends Error {
     this.name = "GuardViolation";
     this.code = code;
     this.dispatchOccurred = false;
+    this.outcomeKnown = true;
   }
 }
 
@@ -19,6 +26,7 @@ export class UnknownDispatchOutcomeError extends Error {
     this.name = "UnknownDispatchOutcomeError";
     this.code = "UNKNOWN_DISPATCH_OUTCOME";
     this.dispatchOccurred = true;
+    this.outcomeKnown = false;
     this.automaticRetryAllowed = false;
   }
 }
@@ -82,6 +90,69 @@ function sameOrderedValues(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+function valueAtPath(root, path, name) {
+  if (!Array.isArray(path)) fail("INVALID_CONFIGURATION", `${name}.path must be an array`);
+  const walk = (current, index) => {
+    if (index === path.length) return current;
+    const segment = path[index];
+    if (segment === "*") {
+      if (!Array.isArray(current)) fail("INVALID_BINDING", `${name} wildcard must resolve through an array`);
+      return current.map((item) => walk(item, index + 1));
+    }
+    if (typeof segment !== "string" || segment === "") fail("INVALID_CONFIGURATION", `${name}.path contains an invalid segment`);
+    if (!current || typeof current !== "object" || !(segment in current)) {
+      fail("MISSING_BINDING", `${name} is missing source path ${path.join(".")}`);
+    }
+    return walk(current[segment], index + 1);
+  };
+  return walk(root, 0);
+}
+
+function projectBinding(source, input, runtimeContext, name) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    fail("INVALID_CONFIGURATION", `${name} binding source must be an object`);
+  }
+  if (source.kind === "capability-input") {
+    return valueAtPath(input, [source.inputName, ...(source.path ?? [])], name);
+  }
+  if (source.kind === "runtime-context") {
+    if (typeof source.claim !== "string" || source.claim === "" || typeof source.requirementId !== "string") {
+      fail("INVALID_CONFIGURATION", `${name} runtime-context source must declare claim and requirementId`);
+    }
+    const claimContract = RUNTIME_CONTEXT_CLAIMS[source.claim];
+    if (claimContract && (
+      source.requirementId !== claimContract.requirementId
+      || !sameOrderedValues(source.path ?? [], claimContract.path)
+    )) {
+      fail("INVALID_CONFIGURATION", `${name} runtime-context source does not match its semantic claim`);
+    }
+    return valueAtPath(runtimeContext, source.path, name);
+  }
+  if (source.kind === "constant") {
+    return JSON.parse(canonicalJson(source.value));
+  }
+  if (source.kind === "derived-calculation") {
+    const selected = valueAtPath(input, [source.inputName, ...(source.path ?? [])], name);
+    if (source.algorithm === "canonical-json-sha256") return canonicalPayloadDigest(selected);
+    if (source.algorithm === "ordered-id-list") {
+      if (!Array.isArray(selected) || selected.some((item) => typeof item !== "string" || item === "")) {
+        fail("INVALID_BINDING", `${name} ordered-id-list must resolve to non-empty string identifiers`);
+      }
+      return selected;
+    }
+    fail("INVALID_CONFIGURATION", `${name} uses an unsupported deterministic calculation`);
+  }
+  fail("INVALID_CONFIGURATION", `${name} uses an unsupported binding source`);
+}
+
 /**
  * Reference guard for a single process/session runtime.
  *
@@ -93,14 +164,61 @@ export class PortableWorkflowGuard {
   #now;
   #maxAttachmentSizeBytes;
   #grants = new Map();
+  #consumedOperations = new Set();
+  #protectedOperations = new Map();
 
-  constructor({ now = () => Date.now(), maxAttachmentSizeBytes = 1_048_576 } = {}) {
+  constructor({ now = () => Date.now(), maxAttachmentSizeBytes = 1_048_576, protectedOperations = [] } = {}) {
     if (typeof now !== "function") fail("INVALID_CONFIGURATION", "now must be a function");
     if (!Number.isSafeInteger(maxAttachmentSizeBytes) || maxAttachmentSizeBytes <= 0) {
       fail("INVALID_CONFIGURATION", "maxAttachmentSizeBytes must be a positive safe integer");
     }
     this.#now = now;
     this.#maxAttachmentSizeBytes = maxAttachmentSizeBytes;
+    if (!Array.isArray(protectedOperations)) fail("INVALID_CONFIGURATION", "protectedOperations must be an array");
+    for (const operation of protectedOperations) {
+      if (!operation || typeof operation !== "object" || Array.isArray(operation)) {
+        fail("INVALID_CONFIGURATION", "each protected operation must be an object");
+      }
+      const workflowId = nonEmptyString(operation.workflowId, "protectedOperations.workflowId");
+      const operationKey = nonEmptyString(operation.operationKey, "protectedOperations.operationKey");
+      if (!operation.expectedBindings || typeof operation.expectedBindings !== "object" || Array.isArray(operation.expectedBindings)) {
+        fail("INVALID_CONFIGURATION", "protected operation expectedBindings must be an object");
+      }
+      if (!operation.bindingSources || typeof operation.bindingSources !== "object" || Array.isArray(operation.bindingSources)) {
+        fail("INVALID_CONFIGURATION", "protected operation bindingSources must be an object");
+      }
+      const safeExpectedBindings = JSON.parse(canonicalJson(operation.expectedBindings));
+      const safeBindingSources = JSON.parse(canonicalJson(operation.bindingSources));
+      if (!sameOrderedValues(Object.keys(safeExpectedBindings).sort(), Object.keys(safeBindingSources).sort())) {
+        fail("INVALID_CONFIGURATION", "protected operation bindingSources must exactly cover expectedBindings");
+      }
+      if (typeof operation.singleUse !== "boolean") {
+        fail("INVALID_CONFIGURATION", "protected operation singleUse must be boolean");
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(safeExpectedBindings, "singleUse")
+        && safeExpectedBindings.singleUse !== operation.singleUse
+      ) {
+        fail("INVALID_CONFIGURATION", "protected operation singleUse must match its expected binding");
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(safeExpectedBindings, "expiresAt")
+        && safeExpectedBindings.expiresAt !== operation.expiresAt
+      ) {
+        fail("INVALID_CONFIGURATION", "protected operation expiresAt must match its expected binding");
+      }
+      if (operation.expiresAt !== undefined) futureExpiry(operation.expiresAt, this.#now(), "protectedOperations.expiresAt");
+      const key = `${workflowId}:${operationKey}`;
+      if (this.#protectedOperations.has(key)) fail("INVALID_CONFIGURATION", "protected operation keys must be unique");
+      this.#protectedOperations.set(key, Object.freeze({
+        workflowId,
+        operationKey,
+        bindingSources: Object.freeze(safeBindingSources),
+        expectedBindings: Object.freeze(safeExpectedBindings),
+        singleUse: operation.singleUse,
+        expiresAt: operation.expiresAt,
+      }));
+    }
   }
 
   #issue(kind, claims) {
@@ -116,6 +234,72 @@ export class PortableWorkflowGuard {
     if (grant.used) fail("GRANT_ALREADY_USED", `${expectedKind} grant has already been used`);
     if (grant.expiresAt <= this.#now()) fail("EXPIRED_GRANT", `${expectedKind} grant has expired`);
     return grant;
+  }
+
+  /**
+   * Generic hard-workflow boundary.
+   *
+   * Generated code supplies the exact public input, trusted runtime context,
+   * and an opaque operation key. Both the Canonical projection rules and the
+   * expected bindings live in the Guard's constructor-injected protected
+   * operation store. The Guard projects actual values itself and dispatches the
+   * same frozen input it inspected, so public Function code cannot substitute a
+   * second payload after checking a caller-provided binding object.
+   */
+  async dispatchWithPolicy({
+    workflowId,
+    input,
+    runtimeContext,
+    operationKey,
+    ...unsupportedPolicy
+  }, dispatch) {
+    if (Object.keys(unsupportedPolicy).length > 0) {
+      fail("INVALID_POLICY", `unsupported workflow policy fields: ${Object.keys(unsupportedPolicy).sort().join(", ")}`);
+    }
+    nonEmptyString(workflowId, "workflowId");
+    if (!input || typeof input !== "object" || Array.isArray(input)) fail("INVALID_BINDING", "input must be an object");
+    if (!runtimeContext || typeof runtimeContext !== "object" || Array.isArray(runtimeContext)) {
+      fail("INVALID_BINDING", "runtimeContext must be a protected Host object");
+    }
+    const protectedKey = `${workflowId}:${nonEmptyString(operationKey, "operationKey")}`;
+    const protectedOperation = this.#protectedOperations.get(protectedKey);
+    if (!protectedOperation || protectedOperation.workflowId !== workflowId) {
+      fail("PROTECTED_OPERATION_NOT_FOUND", "the runtime did not issue this protected operation");
+    }
+    const expectedBindings = protectedOperation.expectedBindings;
+    const bindings = Object.fromEntries(
+      Object.entries(protectedOperation.bindingSources).map(([name, source]) => [
+        name,
+        projectBinding(source, input, runtimeContext, name),
+      ]),
+    );
+    for (const [name, expected] of Object.entries(expectedBindings)) {
+      if (!(name in bindings) || canonicalJson(bindings[name]) !== canonicalJson(expected)) {
+        fail("BINDING_MISMATCH", `${name} does not match its source-proven value`);
+      }
+    }
+    if (protectedOperation.expiresAt !== undefined) {
+      futureExpiry(protectedOperation.expiresAt, this.#now(), "protectedOperations.expiresAt");
+    }
+    if (typeof dispatch !== "function") fail("INVALID_DISPATCH", "dispatch must be a function");
+
+    let consumedKey;
+    if (protectedOperation.singleUse) {
+      consumedKey = protectedKey;
+      if (this.#consumedOperations.has(consumedKey)) {
+        fail("OPERATION_ALREADY_USED", "the protected operation has already been dispatched");
+      }
+      this.#consumedOperations.add(consumedKey);
+    }
+
+    try {
+      const safeInput = deepFreeze(JSON.parse(canonicalJson(input)));
+      return await dispatch(safeInput);
+    } catch (error) {
+      // A consumed key intentionally remains consumed because the external
+      // outcome is unknown and must be reconciled before another attempt.
+      throw new UnknownDispatchOutcomeError(error);
+    }
   }
 
   issueAttachmentGrant({ subjectId, sessionId, attachmentRef, fileName, mediaType, sizeBytes, sha256, expiresAt }) {
@@ -179,14 +363,14 @@ export class PortableWorkflowGuard {
 
     let dispatchResult;
     try {
-      dispatchResult = await dispatch({
+      dispatchResult = await dispatch(deepFreeze({
         target,
         attachmentRef: attachment.attachmentRef,
         fileName: attachment.fileName,
         mediaType: attachment.mediaType,
         sizeBytes: attachment.sizeBytes,
         sha256: attachment.sha256,
-      });
+      }));
     } catch (error) {
       throw new UnknownDispatchOutcomeError(error);
     }
@@ -314,15 +498,17 @@ export class PortableWorkflowGuard {
     }
 
     try {
-      return await dispatch({
+      const safePayload = deepFreeze(JSON.parse(canonicalJson(bindings.payload)));
+      const safeDispatchInput = deepFreeze({
         target: bindings.target,
-        payload: bindings.payload,
+        payload: safePayload,
         payloadDigest: authorized.payloadDigest,
         attachments: authorized.attachments.map((attachment) => ({
           uploadResultToken: attachment.uploadResultToken,
           sha256: attachment.attachmentSha256,
         })),
       });
+      return await dispatch(safeDispatchInput);
     } catch (error) {
       throw new UnknownDispatchOutcomeError(error);
     }

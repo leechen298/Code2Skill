@@ -20,6 +20,22 @@ def repository_files() -> list[Path]:
 
 
 class RepositoryContaminationTest(unittest.TestCase):
+    def test_vnext_assets_keep_only_authoring_inputs_not_stale_derived_views(self) -> None:
+        derived_views = {
+            "capability-bundle.json",
+            "capability-draft.json",
+            "consumer-requirements.json",
+            "goal-contract.json",
+            "host-compatibility-report.json",
+            "verification-matrix.json",
+        }
+        present = {
+            path.name
+            for path in (SKILL_ROOT / "assets").iterdir()
+            if path.is_file()
+        }
+        self.assertTrue(derived_views.isdisjoint(present))
+
     def test_repository_contains_only_product_source_and_tests(self) -> None:
         allowed_top_level = {
             ".gitignore",
@@ -134,8 +150,10 @@ class RepositoryContaminationTest(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        page = (SKILL_ROOT / "assets" / "PAGE.md").read_text(encoding="utf-8")
         context = (SKILL_ROOT / "assets" / "feature-context.md").read_text(
+            encoding="utf-8"
+        )
+        setup = (SKILL_ROOT / "assets" / "MCP-SETUP.md").read_text(
             encoding="utf-8"
         )
         report_schema = json.loads(
@@ -154,11 +172,16 @@ class RepositoryContaminationTest(unittest.TestCase):
             "worker",
             "other",
         })
-        self.assertIn(f"route: {profile['pageRoute']}", page)
-        self.assertIn("## 副作用与确认", page)
-        self.assertIn("Evidence ID", context)
-        self.assertIn("Source ID", context)
-        self.assertIn("Portable locator", context)
+        self.assertNotIn("pageRoute", profile)
+        self.assertFalse((SKILL_ROOT / "assets" / "PAGE.md").exists())
+        self.assertIn("references/feature-context.md", context)
+        self.assertIn("证据 ID", context)
+        self.assertIn("来源 ID", context)
+        self.assertIn("可移植定位符", context)
+        self.assertIn("npx skills add", setup)
+        self.assertIn("只安装 Skill", setup)
+        for topic in ("MCP 启动", "MCP 注册", "认证", "环境变量"):
+            self.assertIn(topic, setup)
 
         runtime_check = report_schema["$defs"]["passedRuntimeCheck"]
         runtime_requirement = runtime_check["allOf"][1]["required"]

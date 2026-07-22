@@ -17,6 +17,8 @@ Apply these layers per capability and per hard workflow. A package-level summary
 
 ## Minimum test matrix
 
+The matrix is not selected manually. Derive the minimum `verificationChecks` for each Capability from the Canonical Contract: every Capability gets valid input/output, invalid-input rejection, and structured error recovery; HTTP, dynamic-domain, conditional, attachment, write, backend-authoritative, Goal, and derived-composition facts add their applicable checks. Canonical custom checks may append to this set but cannot remove it. Finalization rejects a `passed` phase that omits any required `checkId`; an unpassed phase retains the missing IDs and remains below approval.
+
 For every Tool:
 
 - one valid minimal request;
@@ -24,6 +26,8 @@ For every Tool:
 - malformed and missing required inputs;
 - authorization and tenant rejection when applicable;
 - upstream failure and stable error mapping;
+- backend business rejection with structured category/code/message/field details when available, proving the Agent can correct information without treating MCP as broken;
+- for writes, a response-proven rejection marked with trusted `outcomeKnown: true`, preserving its actionable code but remaining non-retryable, plus a timeout/reset/disconnect or unmarked failure that becomes non-retryable `UNKNOWN_DISPATCH_OUTCOME`;
 - output contract validation.
 
 For the capability set:
@@ -44,12 +48,29 @@ For the capability set:
 - every conditional requirement tested on both sides of its condition;
 - every derived value rejected when fabricated by the caller;
 - every attachment-dependent path tested from approved reference/content through upload result and downstream binding;
+- every Tool listed by the detached MCP runtime compared exactly with the Canonical-derived input/output Schema and four annotations, plus a Schema-valid success, one rejected invalid-argument case even for zero-input Tools, matching text projection, handler-level structured execution error, and applicable dry-run;
 - a Host profile without confirmation, session, or attachment support, proving capability-specific disablement or `requires-host-integration` rather than silent weakening.
 - repeated generation from the same authorized sources, proving stable business identities and semantically equivalent Canonical Contracts after normalization.
+- a client-feature fixture with extra backend-internal methods, proving only the client's real API surface contributes candidate Function/MCP capabilities;
+- a simple write whose target API owns ordinary business validation, proving no synthetic preflight, validation grant, or hard Workflow is generated and the business error remains recoverable;
+- a genuinely protected write, proving its declared hard Guard rejects bypass with zero external writes;
+- an attachment fixture, proving the Host supplies the approved attachment while the generated business upload and downstream binding remain platform-neutral. For every Canonical `contentBinding` target, a passed `attachment-resolution-runtime-vector` records `attachmentProof` bound to the exact `stepId`, request `location`, and `path`: exactly one resolver call and one business dispatch on success, zero dispatch when resolution fails, no raw-grant forwarding, resolved content in the declared request field, and verified size plus digest. Compute `traceEvidenceHash` as the canonical JSON SHA-256 of the proof without that field; the enclosing check's `evidenceHash` must equal the same digest;
+- at least two additional synthetic features with different languages, contract names, and repository topologies, proving the implementation is not specialized for one project or one business flow.
 
 ## Verification matrix
 
-`verification-matrix.json` contains one row for every capability and every deterministic workflow. Each row records the exact checks and evidence behind its current state:
+Before recording runtime reachability, run the repository-provided detached protocol probe:
+
+```bash
+python3 <skill-root>/scripts/probe_mcp.py <candidate> \
+  --call /path/to/valid-tool-call.json \
+  --error-call /path/to/execution-error-tool-call.json \
+  --dry-run-call /path/to/dry-run-tool-call.json
+```
+
+It verifies MCP initialize, exact Tool discovery, the unknown-Tool protocol error, supplied Schema-valid successful calls, one structured handler execution error per Tool, the exact dry-run envelope, and independence from source-repository `node_modules`. Missing-argument protocol checks remain distinct from handler-level business/authorization/upstream failures. The probe does not by itself prove zero dispatch; record a separate Function/Guard check with a counted dispatcher. A successful detached probe is build/protocol evidence; it becomes capability runtime evidence only when the supplied non-dry-run call actually reaches the authorized target and its capability-scoped live input/result hashes are retained.
+
+`verification-matrix.json` contains one row for every capability and every declared deterministic workflow. A package with no hard Workflow has no synthetic Workflow row. Each row records the exact checks and evidence behind its current state:
 
 - `generated`;
 - `behavior-verified`;
@@ -61,6 +82,8 @@ For the capability set:
 Do not copy a successful live receipt across rows. A read-only call proves nothing about an unexecuted calculation, upload, validation, or write capability. If a real write test is unsafe or unavailable, retain `requires-review`; another Tool's success cannot approve it.
 
 Verify `host-compatibility-report.json` from `consumer-requirements.json` and `host-profile.json`. Host compatibility is about facilities, not product names. Missing facilities must produce deterministic per-capability degradation.
+
+Do not mark a Capability `hostVerified` merely because its Host check command passed: its compatibility assessment must also be `enabled`. A Workflow additionally requires every Capability named by its Canonical `capabilityIds` to be enabled. Writes require Host verification for approval; a read with no Host requirements may pass the Host gate without claiming `hostVerified`. Keep Canonical `requires-review` separate from Host integration status.
 
 ## Finalization input report
 
@@ -131,5 +154,7 @@ Use precise status statements:
 - “Host verified” means the declared Consumer Host facilities were checked and the capability ran with required confirmation/session/attachment/authentication behavior.
 - “Requires Host integration” means the business contract may be complete but a required trusted Host facility is absent.
 - “Deployed” means a delivery action succeeded.
+
+“Skill installed” means only that a Skill discovery mechanism copied or linked the knowledge package. It does not mean the MCP process is registered, reachable, authenticated, runtime verified, Host verified, or deployed. Report those states separately according to `MCP-SETUP.md` and the verification matrix.
 
 Never infer a later state from an earlier one.

@@ -1,38 +1,29 @@
 # Chinese documentation contract
 
-The `node-stdio` strict export uses Chinese documentation because an executable Tool contract alone does not preserve a feature's business meaning. All claims must agree with the Canonical Contract, Goal Contract, capability graph, Consumer requirements, and verification matrix; documentation may explain those contracts but must not create a second version of them. `PAGE.md` is a compatibility filename and does not imply that every frontend, backend, API, RPC, message, or worker feature has a UI page.
+The `node-stdio` strict export uses Chinese documentation because an executable Tool contract alone does not preserve a feature's business meaning. All claims must agree with the Canonical Contract, Goal Contract, capability graph, typed handoffs, Consumer requirements, hard workflows, conflicts, and verification matrix; documentation may explain those contracts but must not create a second version of them. vNext derives all of those prose-relevant facts into `references/capability-contracts.json` as the authoritative documentation surface and generates `references/feature-context.md`, `SKILL.md`, `MCP.zh-CN.md`, and `MCP-SETUP.md`. The three Agent-facing documents name that file and carry its exact SHA-256 marker, so any covered Canonical change forces explicit documentation review. They must not restate contradictory requiredness or operation policy. vNext does not generate `PAGE.md` and does not require `pageRoute`. A legacy package may retain those names only through its legacy compatibility path.
 
-## PAGE.md
-
-Frontmatter contains exactly the useful public metadata:
-
-```yaml
----
-name: knowledge-search
-title: 知识内容检索与详情阅读页面说明
-description: 说明用户如何在知识页面筛选内容、读取详情，并帮助 Agent 判断可以调用哪些只读能力以及何时停止。
-surface: route
-surface-id: /knowledge
-route: /knowledge
-language: zh-CN
----
-```
-
-`surface` is one of `route`, `backend-api`, `rpc`, `message`, `worker`, or `other`; `surface-id` is the source-proven route, API/RPC operation family, message topic/consumer identity, worker identity, or another stable feature identifier. For a route-less feature, keep `pageRoute` and PAGE `route` at the reserved `/__code2skill__/features/<feature-id>` value required by the current Runtime Profile, and state clearly that it is document identity rather than a deployed route or request target. Never invent screen regions for a route-less feature; interpret the required page-oriented headings as feature-surface sections.
+## references/feature-context.md
 
 Use a Chinese H1 and these H2 sections:
 
-1. 页面定位
+1. 功能定位
 2. 典型用户目标
-3. 页面区域与业务信息
-4. 动态依赖与失效规则
-5. 可用 MCP 能力
-6. Agent 使用边界
-7. 不属于本页面的能力
-8. 推荐起点
-9. 副作用与确认（存在 write Tool 时必需；纯只读 feature 可写明无副作用或省略）
+3. 能力来源与范围
+4. 参与者与权限
+5. 业务概念与字段语义
+6. 动态依赖与失效规则
+7. 状态与业务规则
+8. 原客户端行为
+9. 结果与失败
+10. 相关能力
+11. 未知项
+12. 证据索引
 
-Mention every Tool with backticks under “可用 MCP 能力”. State whether the feature is read-only. For each write Tool add a separate line under “副作用与确认” naming the action, trusted Host/runtime confirmation requirement, deterministic Guard boundary, no-automatic-retry rule, and human reconciliation for unknown outcomes. A route-less feature describes its real API/RPC/message/worker inputs and outputs instead of pretending that a page exists.
+Under “能力来源与范围”, state the real `featureSurface.kind` and identifier. For a client feature, list the client-observed backend API families that define the candidate Function/MCP surface and explain that backend/contract/test code supplements their field, permission, side-effect, idempotency, and error meaning. Explicitly exclude backend-internal methods that are outside the scoped client call graph unless the user expanded scope. For a backend-only, RPC, message, worker, or other feature, describe the actual public entry surface without inventing a screen or route.
+
+Under “原客户端行为” record the observed API calls, conditions, branches, error handling, and stopping points. If no client exists, state that explicitly instead of inventing one. Mention every Tool with backticks under “相关能力” and state whether it is read or write. Describe ordinary business validation as target-API authoritative. Under “结果与失败” distinguish correctable business errors, input/schema errors, authorization, upstream/network, malformed output, and unknown write outcomes. For each write Tool, state confirmation, retry, and reconciliation policy. Mention a deterministic Guard only when the Canonical Contract declares a proven hard Workflow; do not imply every write has one.
+
+Every material row cites an `evidenceId` that exists exactly once in `canonical-contract.json.evidenceCatalog`, along with its `sourceId` and portable locator. Do not include absolute machine paths. The document is business background for the generated Skill, not a duplicate Tool schema or fixed operation transcript.
 
 ## SKILL.md
 
@@ -59,7 +50,7 @@ Under “能力目录”, add one `### ... \`tool_name\`` block per Tool. Each b
 - downstream handoff or the fact that the Tool can answer and stop independently;
 - read/write classification and side-effect policy.
 
-Under “输入与来源” and “意图路由”, explain progressive collection rather than demanding a complete form in the first message. Distinguish always-required, conditionally required, optional, derived, and dynamic information; state freshness and refresh rules. Tell the Agent to reuse valid known information, skip unnecessary lookups, and ask only for currently missing values.
+Under “输入与来源” and “意图路由”, explain progressive collection rather than demanding a complete form in the first message. Distinguish always-required, conditionally required, optional, derived, and dynamic information; state freshness and refresh rules. Derived and dynamic Goal information comes only from an exact Capability output or declared trusted Host requirement, never a user answer or an unimplemented local derivation. Tell the Agent to reuse valid known information, skip unnecessary lookups, and ask only for currently missing user-providable values.
 
 Keep the twelve canonical H2 headings above verbatim. Additional subsections are allowed, but synonyms must not replace the canonical headings because consumers should be able to locate each contract deterministically.
 
@@ -69,7 +60,7 @@ The Skill must allow partial goals and freely composable calls. Never say every 
 
 Describe source-observed paths as `observed` and new contract-compatible paths as `derived composition`. State that derived write compositions retain every runtime guard and need separate verification. If `host-compatibility-report.json` disables a capability or marks it `requires-host-integration`, the Skill must not recommend it as immediately executable.
 
-Cover failures from schema validation, provenance IDs/tokens, HTTP/network/timeout/disconnection, malformed output, empty/404 results, and retry policy. Explain dry-run. For writes, require trusted Host/runtime confirmation, prohibit automatic retry for non-idempotent operations, and stop for human reconciliation when dispatch outcome is unknown.
+Cover failures from schema validation, provenance IDs/tokens, backend business rejection, authorization, HTTP/network/timeout/disconnection, malformed output, empty/404 results, and retry policy. Tell the Agent how to use structured error category, source code/message, field details, retryability, and outcome certainty to decide whether to ask for corrected information, re-authenticate, retry a safe read, or stop. Explain dry-run. For writes, require trusted Host/runtime confirmation only when the Canonical policy requires it, prohibit automatic retry for non-idempotent operations, and stop for human reconciliation when dispatch outcome is unknown. Do not describe ordinary backend business validation as a mandatory preflight or hard Workflow.
 
 Provide at least three complete `### 示例...` blocks. Across them use at least three Tools when the bundle has three or more. Each example contains user goal, calls/arguments, stopping condition, and answer shape.
 
@@ -77,10 +68,37 @@ Across the examples, include at least one progressively collected goal and one c
 
 ## MCP.zh-CN.md
 
-Explain MCP, stdio transport, protocol `2025-11-25`, `tools/list`, `tools/call`, `title`, `description`, `inputSchema`, `outputSchema`, `structuredContent`, `isError`, `annotations`, dry-run, input, output, errors, examples, and handoff semantics.
+Explain MCP, stdio transport, protocol `2025-11-25`, `tools/list`, `tools/call`, `title`, `description`, `inputSchema`, `outputSchema`, `structuredContent`, `isError`, `annotations`, dry-run, input, output, structured error categories, examples, and handoff semantics.
 
-Create one H2 section containing each `tool_name` in backticks. Every Tool section covers purpose/calling occasion, all inputs, required output leaf fields, HTTP or local behavior, failure mapping, independent stopping or handoff, and a complete `tools/call` example. Include at least one successful `{status, data}` `structuredContent` response and one `isError: true` response pattern.
+Create one H2 section containing each `tool_name` in backticks. Every Tool section covers purpose/calling occasion, all inputs, required output leaf fields, HTTP or local behavior, failure mapping, independent stopping or handoff, and a complete `tools/call` example. Every Tool section includes both a successful `{status, data}` `structuredContent` response and an `"isError": true` response with `structuredContent`. For vNext, spell every declared `errorContract.codePath`, `messagePath`, `detailsPath`, and optional `retryabilityPath` as its complete dot-joined path in backticks, for example `error.code`; when no retryability path exists, state that the default is not retryable.
 
 Each Tool section contains at least 75 Chinese characters and uses the explicit labels “用途或调用时机”、“入参”、“出参”、“HTTP/本地行为”、“失败与错误”、“handoff/交接”和“示例”. Mention every input and required output leaf with backticks. Supply one literal JSON call containing both `"name"` and `"arguments"` for every Tool.
 
 Do not pad the documents with repeated boilerplate. Use the required length to preserve field meaning, dynamic invalidation, boundary decisions, error recovery, and concrete calls.
+
+## MCP-SETUP.md
+
+Generate a short platform-neutral setup document with these H2 sections:
+
+1. Skill 安装
+2. MCP 启动
+3. Host 注册参数
+4. 环境变量与认证
+5. 连通验证
+6. 状态边界
+
+Under “Skill 安装” include:
+
+```bash
+npx skills add ./generated/code2skill/<feature-id> -a <agent-id> -g -y
+```
+
+Those angle-bracket values exist only in the authoring template. Before export, replace every placeholder with the actual package name, Agent selector, startup path, Runtime Profile, and exact `export-profile.json.dryRunEnvironmentVariable`; the strict validator rejects unresolved placeholders and setup/profile drift.
+
+Immediately state that this installs only the Skill knowledge package. It does not start or register MCP, inject authentication, set environment variables, or prove runtime/business availability.
+
+Under “MCP 启动” and “Host 注册参数” give the executable `node <absolute-package-path>/mcp-tool/index.mjs` form and the equivalent platform-neutral `command`, `args`, `cwd`, and `env` fields. Do not include a branded Host configuration file or assume one Host's private schema.
+
+List only source-/profile-proven environment variables. Explain that credentials and identity come from the deployment Host or target application's supported authentication boundary and must not be written into `SKILL.md`, Feature Context, manifests, or example commands. If any capability requires `attachment-resolution`, explain that the deployment must provide this generic approved-reference-to-content/stream facility, that Code2Skill does not implement message/file ingress, and that the dependent capability remains `requires-host-integration` when it is absent. Connectivity verification covers process startup, MCP initialize, exact `tools/list`, one output-Schema-valid safe/mock success and one structured handler error per Tool, a Canonical-policy-matching dry-run call per write Tool, a separate counted-dispatcher proof of zero external effects, and only the real calls actually safe and authorized for that deployment. Attachment runtime verification additionally uses resolver and business-request spies to prove one resolution and dispatch on success, zero dispatch on resolution failure, no raw grant forwarding, correct target-field binding, and size/digest agreement. If a write cannot be exercised safely, leave its runtime state unverified rather than calling production merely to satisfy the probe.
+
+The status section must distinguish: Skill installed, MCP registered, MCP reachable, capability behavior verified, runtime verified, Host verified, and deployed. Never collapse them into one “installed” or “available” claim.

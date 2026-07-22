@@ -28,10 +28,6 @@
       "status": "unsupported",
       "details": "Cannot resolve user-approved attachment references."
     },
-    "secureUpload": {
-      "status": "external-integration",
-      "details": "Requires an approved attachment bridge."
-    },
     "unknownOutcomeReconciliation": {
       "status": "supported",
       "details": "Can stop, record uncertainty, and reconcile before a later attempt."
