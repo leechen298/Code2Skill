@@ -16,21 +16,38 @@ VALIDATOR = SKILL_ROOT / "scripts" / "validate_core_export.py"
 
 
 FUNCTION = """import { z } from 'zod';
-export const lookupTopicInputSchema = z.object({topic: z.string().min(1)}).passthrough();
-export const lookupTopicOutputSchema = z.object({
-  status: z.unknown().optional(),
-  data: z.unknown().optional()
+export const lookupTopicInputSchema = z.object({
+  topic: z.unknown().optional().describe('后端接受的主题标识；类型由 Agent 和后端协商')
 }).passthrough();
 export async function lookupTopic(input, context = {}) {
-  const validated = lookupTopicInputSchema.parse(input);
-  if (validated.topic === 'fail') {
-    throw Object.assign(new Error('synthetic failure'), {code: 'SYNTHETIC_FAILURE', outcomeKnown: true});
+  const request = {method: 'GET', path: '/topics', query: {topic: input.topic}};
+  context.captureRequest?.(request);
+  if (input.topic === 'network-failure') {
+    const error = new Error('socket closed');
+    Object.defineProperty(error, 'code', {value: 'ECONNRESET'});
+    Object.defineProperty(error, 'cause', {value: 'synthetic socket'});
+    throw error;
   }
-  context.captureRequest?.({method: 'GET', path: '/topics', query: {topic: validated.topic}});
-  if (validated.topic === 'variant') {
-    return {status: null, data: {topic: validated.topic}, message: 'preserved'};
+  if (input.topic === 'client-http-500') {
+    const error = new Error('client rejected the HTTP status');
+    Object.defineProperty(error, 'response', {
+      value: {status: 500, data: {code: 'E_CLIENT', msg: 'response survived client throw'}}
+    });
+    throw error;
   }
-  return {status: 'success', data: {topic: validated.topic}};
+  if (input.topic === 'http-500') {
+    return {httpStatus: 500, bodyText: '{"code":"E_TEMP","msg":"backend supplied detail","data":{"accepted":false}}'};
+  }
+  if (input.topic === 'plain-text') {
+    return {httpStatus: 502, bodyText: 'upstream returned plain text'};
+  }
+  if (input.topic === 'long-text') {
+    return {httpStatus: 200, bodyText: 'x'.repeat(5000)};
+  }
+  if (input.topic === 'unknown-decision') {
+    return {httpStatus: 200, bodyText: '{"needsReview":null}'};
+  }
+  return {httpStatus: 200, bodyText: JSON.stringify({topic: input.topic})};
 }
 """
 
@@ -38,28 +55,31 @@ ADAPTER = """import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   lookupTopic,
-  lookupTopicInputSchema,
-  lookupTopicOutputSchema
+  lookupTopicInputSchema
 } from '../function-core/index.mjs';
-import { normalizeToolError, toMcpResult } from '../portable-error-normalizer.mjs';
+import {
+  httpResultFromError,
+  toAgentError,
+  toAgentResult
+} from '../portable-agent-result.mjs';
 const server = new McpServer({name: 'synthetic-core', version: '1'});
 server.registerTool("lookup_topic", {
   title: '主题：查询详情',
-  description: '根据主题代码查询一个合成主题详情。',
+  description: '根据主题标识查询一个合成主题详情；参数和响应由 Agent 根据后端反馈判断。',
   inputSchema: lookupTopicInputSchema,
-  outputSchema: lookupTopicOutputSchema,
   annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}
 }, async (input, runtimeContext) => {
   if (process.env.CODE2SKILL_DRY_RUN === "1") {
     const dryRunResult = {dryRun: true, validatedInput: input};
-    return toMcpResult(dryRunResult, false);
+    return toAgentResult(dryRunResult);
   }
   try {
     const result = await lookupTopic(input, runtimeContext);
-    return toMcpResult(result, false);
+    return toAgentResult(result);
   } catch (error) {
-    const result = normalizeToolError(error, {sideEffect: 'read', automaticRetry: 'safe-read-only'});
-    return toMcpResult(result, true);
+    const httpResult = httpResultFromError(error);
+    if (httpResult) return toAgentResult(httpResult);
+    return toAgentError(error);
   }
 });
 await server.connect(new StdioServerTransport());
@@ -69,6 +89,7 @@ FAKE_ZOD = """class Schema {
   constructor(parse) { this._parse = parse; }
   parse(value) { return this._parse(value); }
   optional() { return new Schema((value) => value === undefined ? undefined : this.parse(value)); }
+  describe() { return this; }
   min(size) {
     return new Schema((value) => {
       const parsed = this.parse(value);
@@ -84,7 +105,10 @@ function object(shape) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('expected object');
     if (strict && Object.keys(value).some((key) => !(key in shape))) throw new Error('unknown key');
     const result = {};
-    for (const [key, child] of Object.entries(shape)) result[key] = child.parse(value[key]);
+    for (const [key, child] of Object.entries(shape)) {
+      const parsed = child.parse(value[key]);
+      if (parsed !== undefined || Object.hasOwn(value, key)) result[key] = parsed;
+    }
     if (passthrough) for (const [key, child] of Object.entries(value)) if (!(key in shape)) result[key] = child;
     return result;
   });
@@ -166,22 +190,60 @@ def create_candidate(root: Path) -> Path:
     write(candidate / "function-core" / "index.mjs", FUNCTION)
     write(candidate / "mcp-tool" / "index.mjs", ADAPTER)
     shutil.copyfile(
-        SKILL_ROOT / "assets" / "portable-error-normalizer.mjs",
-        candidate / "portable-error-normalizer.mjs",
+        SKILL_ROOT / "assets" / "portable-agent-result.mjs",
+        candidate / "portable-agent-result.mjs",
     )
     write(
         candidate / "tests" / "function.test.mjs",
         "import { test } from 'node:test';\n"
         "import assert from 'node:assert/strict';\n"
         "import { lookupTopic } from '../function-core/index.mjs';\n"
-        "test('lookup_topic validates and returns the topic', async () => {\n"
+        "test('lookup_topic preserves Agent-provided value shapes', async () => {\n"
         "  let capturedRequest;\n"
-        "  assert.deepEqual(await lookupTopic({topic: 'alpha', unexpected: 'ignored'}, "
+        "  assert.deepEqual(await lookupTopic({topic: 42, unexpected: 'Agent context'}, "
         "{captureRequest: (request) => { capturedRequest = request; }}), "
-        "{status: 'success', data: {topic: 'alpha'}});\n"
-        "  assert.deepEqual(capturedRequest, {method: 'GET', path: '/topics', query: {topic: 'alpha'}});\n"
-        "  await assert.rejects(() => lookupTopic({topic: ''}));\n"
-        "  await assert.rejects(() => lookupTopic(null));\n"
+        "{httpStatus: 200, bodyText: '{\"topic\":42}'});\n"
+        "  assert.deepEqual(capturedRequest, {method: 'GET', path: '/topics', query: {topic: 42}});\n"
+        "  assert.deepEqual(await lookupTopic({topic: null}), "
+        "{httpStatus: 200, bodyText: '{\"topic\":null}'});\n"
+        "  assert.deepEqual(await lookupTopic({}), {httpStatus: 200, bodyText: '{}'});\n"
+        "});\n",
+    )
+    write(
+        candidate / "tests" / "result.test.mjs",
+        "import { test } from 'node:test';\n"
+        "import assert from 'node:assert/strict';\n"
+        "import { readHttpResponse, toAgentResult } from '../portable-agent-result.mjs';\n"
+        "test('readHttpResponse preserves every HTTP status and complete body', async () => {\n"
+        "  const jsonText = '{\"code\":\"E_TEMP\",\"msg\":\"backend detail\","
+        "\"data\":{\"accepted\":false},\"large\":9007199254740993}';\n"
+        "  const httpResult = await readHttpResponse({status: 500, text: async () => jsonText});\n"
+        "  assert.deepEqual(httpResult, {httpStatus: 500, bodyText: jsonText});\n"
+        "  const projectedHttpResult = toAgentResult(httpResult);\n"
+        "  assert.equal(projectedHttpResult.structuredContent.bodyText, jsonText);\n"
+        "  assert.deepEqual(JSON.parse(projectedHttpResult.content[0].text), "
+        "projectedHttpResult.structuredContent);\n"
+        "  assert.deepEqual(await readHttpResponse({status: 400, text: async () => 'plain rejection'}), "
+        "{httpStatus: 400, bodyText: 'plain rejection'});\n"
+        "  assert.deepEqual(await readHttpResponse({status: 200, text: async () => '42'}), "
+        "{httpStatus: 200, bodyText: '42'});\n"
+        "  assert.deepEqual(await readHttpResponse({status: 200, text: async () => 'null'}), "
+        "{httpStatus: 200, bodyText: 'null'});\n"
+        "  assert.equal((await readHttpResponse({status: 200, text: async () => "
+        "'x'.repeat(5000)})).bodyText.length, 5000);\n"
+        "  assert.deepEqual(await readHttpResponse({status: 204, text: async () => ''}), "
+        "{httpStatus: 204, bodyText: ''});\n"
+        "});\n"
+        "test('toAgentResult preserves business fields and keeps projections consistent', () => {\n"
+        "  const projected = toAgentResult({body: {stack: 'business value', present: false, "
+        "unknown: null, missing: undefined}});\n"
+        "  assert.deepEqual(projected.structuredContent, "
+        "{body: {stack: 'business value', present: false, unknown: null}});\n"
+        "  assert.deepEqual(JSON.parse(projected.content[0].text), projected.structuredContent);\n"
+        "  for (const value of ['plain', [1, null, false]]) {\n"
+        "    const result = toAgentResult(value);\n"
+        "    assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent);\n"
+        "  }\n"
         "});\n",
     )
     write(
@@ -208,26 +270,43 @@ def create_candidate(root: Path) -> Path:
         "    child.stdin.end();\n"
         "  });\n"
         "}\n"
-        "test('tools/list and tools/call expose lookup_topic structuredContent and isError', async () => {\n"
+        "test('tools/list and tools/call leave parameters and responses to the Agent', async () => {\n"
         "  const replies = await exchange([\n"
         "    {jsonrpc: '2.0', id: 1, method: 'initialize', params: {}},\n"
         "    {jsonrpc: '2.0', id: 2, method: 'tools/list', params: {}},\n"
-        "    {jsonrpc: '2.0', id: 3, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: 'alpha'}}},\n"
+        "    {jsonrpc: '2.0', id: 3, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: null, extra: 'kept'}}},\n"
         "    {jsonrpc: '2.0', id: 4, method: 'tools/call', params: {name: 'lookup_topic', arguments: {}}}\n"
         "  ]);\n"
-        "  const failureReplies = await exchange([\n"
+        "  const backendReplies = await exchange([\n"
         "    {jsonrpc: '2.0', id: 10, method: 'initialize', params: {}},\n"
-        "    {jsonrpc: '2.0', id: 11, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: 'fail'}}},\n"
-        "    {jsonrpc: '2.0', id: 12, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: 'variant'}}}\n"
+        "    {jsonrpc: '2.0', id: 11, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: 'http-500'}}},\n"
+        "    {jsonrpc: '2.0', id: 12, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: 'plain-text'}}},\n"
+        "    {jsonrpc: '2.0', id: 13, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: 'long-text'}}},\n"
+        "    {jsonrpc: '2.0', id: 14, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: 'unknown-decision'}}},\n"
+        "    {jsonrpc: '2.0', id: 15, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: 'client-http-500'}}},\n"
+        "    {jsonrpc: '2.0', id: 16, method: 'tools/call', params: {name: 'lookup_topic', arguments: {topic: 'network-failure'}}}\n"
         "  ], '0');\n"
         "  assert.equal(replies[1].result.tools[0].name, 'lookup_topic');\n"
+        "  assert.equal('outputSchema' in replies[1].result.tools[0], false);\n"
         "  assert.equal(replies[2].result.isError, false);\n"
-        "  assert.deepEqual(JSON.parse(replies[2].result.content[0].text), replies[2].result.structuredContent);\n"
-        "  assert.equal(replies[3].error.code, -32602);\n"
-        "  assert.equal(failureReplies[1].result.isError, true);\n"
-        "  assert.equal(failureReplies[1].result.structuredContent.code, 'SYNTHETIC_FAILURE');\n"
-        "  assert.equal(failureReplies[2].result.isError, false);\n"
-        "  assert.equal(failureReplies[2].result.structuredContent.message, 'preserved');\n"
+        "  assert.deepEqual(replies[2].result.structuredContent.validatedInput, {topic: null, extra: 'kept'});\n"
+        "  assert.deepEqual(replies[3].result.structuredContent.validatedInput, {});\n"
+        "  assert.equal(backendReplies[1].result.isError, false);\n"
+        "  assert.equal(backendReplies[1].result.structuredContent.httpStatus, 500);\n"
+        "  assert.equal(backendReplies[1].result.structuredContent.bodyText, '{\"code\":\"E_TEMP\",\"msg\":\"backend supplied detail\",\"data\":{\"accepted\":false}}');\n"
+        "  assert.equal(backendReplies[2].result.structuredContent.bodyText, 'upstream returned plain text');\n"
+        "  assert.equal(backendReplies[3].result.structuredContent.bodyText.length, 5000);\n"
+        "  assert.equal(backendReplies[4].result.structuredContent.bodyText, '{\"needsReview\":null}');\n"
+        "  assert.equal(backendReplies[5].result.isError, false);\n"
+        "  assert.equal(backendReplies[5].result.structuredContent.httpStatus, 500);\n"
+        "  assert.equal(backendReplies[5].result.structuredContent.body.msg, 'response survived client throw');\n"
+        "  assert.equal(backendReplies[6].result.isError, true);\n"
+        "  assert.equal(backendReplies[6].result.structuredContent.code, 'ECONNRESET');\n"
+        "  assert.equal(backendReplies[6].result.structuredContent.message, 'socket closed');\n"
+        "  assert.equal(backendReplies[6].result.structuredContent.cause, 'synthetic socket');\n"
+        "  assert.equal('retryable' in backendReplies[6].result.structuredContent, false);\n"
+        "  assert.equal('outcomeKnown' in backendReplies[6].result.structuredContent, false);\n"
+        "  assert.equal(JSON.parse(backendReplies[3].result.content[0].text).bodyText.length, 5000);\n"
         "});\n",
     )
     write(
@@ -285,13 +364,28 @@ def run_validator(
 class CoreExportValidatorTest(unittest.TestCase):
     def test_repository_skill_defaults_to_core_without_reloading_strict_audit(self) -> None:
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        core_setup = (SKILL_ROOT / "assets" / "core-MCP-SETUP.md").read_text(
+            encoding="utf-8"
+        )
+        core_context = (
+            SKILL_ROOT / "assets" / "core-feature-context.md"
+        ).read_text(encoding="utf-8")
         self.assertIn("默认交付：core-export-v1", skill)
         self.assertIn("strict-export-v1` 保留兼容，但不再默认执行", skill)
         self.assertIn("不要在默认包中生成 Canonical/Goal Contract", skill)
         self.assertIn("不要仅凭字段名判断语义", skill)
-        self.assertIn("不得把它提升为所有写操作的全局必经步骤", skill)
+        self.assertIn("每个 Skill 只服务一个主要用户目标", skill)
+        self.assertIn("不得写成该 Skill 的前置步骤", skill)
         self.assertIn("部署信任前提", skill)
-        self.assertIn("输出 Schema 是低约束的可执行边界", skill)
+        self.assertIn("默认不声明 `outputSchema`", skill)
+        self.assertIn("由 Consumer Agent 结合用户目标和实际结果决定", skill)
+        self.assertIn("assets/core-MCP-SETUP.md", skill)
+        self.assertIn("assets/core-feature-context.md", skill)
+        self.assertNotIn("UNKNOWN_DISPATCH_OUTCOME", skill)
+        for core_template in (core_setup, core_context):
+            self.assertNotIn("portable-error-normalizer", core_template)
+            self.assertNotIn("UNKNOWN_DISPATCH_OUTCOME", core_template)
+            self.assertNotIn("canonical-contract", core_template)
         self.assertLess(
             len(skill.encode("utf-8")),
             20_000,
@@ -305,6 +399,75 @@ class CoreExportValidatorTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("MCP discovery, and package tests passed", result.stdout)
             self.assertFalse((candidate / "canonical-contract.json").exists())
+
+    def test_accepts_multiple_independent_goal_skills_with_shared_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = create_candidate(Path(directory))
+            root_skill = candidate / "SKILL.md"
+            first_skill = candidate / "skills" / "inspect-topic" / "SKILL.md"
+            first_skill.parent.mkdir(parents=True)
+            root_skill.rename(first_skill)
+            write(
+                candidate / "skills" / "refresh-topic" / "SKILL.md",
+                "---\nname: refresh-topic\ndescription: 刷新合成主题。\n---\n\n# 刷新主题\n",
+            )
+            result = run_validator(candidate)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_root_skill_that_would_shadow_goal_skills(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = create_candidate(Path(directory))
+            write(
+                candidate / "skills" / "refresh-topic" / "SKILL.md",
+                "---\nname: refresh-topic\ndescription: 刷新合成主题。\n---\n",
+            )
+            result = run_validator(candidate)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("root Skill shadows nested skills", result.stderr)
+
+    def test_rejects_duplicate_goal_skill_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = create_candidate(Path(directory))
+            first_skill = candidate / "skills" / "inspect-topic" / "SKILL.md"
+            first_skill.parent.mkdir(parents=True)
+            (candidate / "SKILL.md").rename(first_skill)
+            write(
+                candidate / "skills" / "refresh-topic" / "SKILL.md",
+                "---\nname: synthetic-core\ndescription: 刷新合成主题。\n---\n",
+            )
+            result = run_validator(candidate)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("duplicate Skill name", result.stderr)
+
+    def test_rejects_invalid_goal_skill_frontmatter_values(self) -> None:
+        for name, description in (
+            ("", "有效说明"),
+            ("123", "有效说明"),
+            ("Bad_Name", "有效说明"),
+            ("valid-name", ""),
+            ("valid-name", "123"),
+            ("valid-name", "false"),
+            ("valid-name", "null"),
+            ("valid-name", "[]"),
+        ):
+            with self.subTest(name=name, description=description):
+                with tempfile.TemporaryDirectory() as directory:
+                    candidate = create_candidate(Path(directory))
+                    write(
+                        candidate / "SKILL.md",
+                        f"---\nname: {name}\ndescription: {description}\n---\n",
+                    )
+                    result = run_validator(candidate)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn("frontmatter", result.stderr)
+
+    def test_requires_at_least_one_goal_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = create_candidate(Path(directory))
+            (candidate / "SKILL.md").unlink()
+            result = run_validator(candidate)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("requires SKILL.md", result.stderr)
 
     def test_rejects_strict_audit_artifacts_in_default_package(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -379,7 +542,10 @@ class CoreExportValidatorTest(unittest.TestCase):
             adapter.write_text(
                 adapter.read_text(encoding="utf-8")
                 .replace("  title: '主题：查询详情',\n", "")
-                .replace("  description: '根据主题代码查询一个合成主题详情。',\n", "")
+                .replace(
+                    "  description: '根据主题标识查询一个合成主题详情；参数和响应由 Agent 根据后端反馈判断。',\n",
+                    "",
+                )
                 .replace(
                     "  annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}\n",
                     "  annotations: {readOnlyHint: 'yes'}\n",
@@ -407,29 +573,15 @@ class CoreExportValidatorTest(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("code2skill.profile", result.stderr)
 
-    def test_rejects_input_schemas_that_are_declared_but_not_executed(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            candidate = create_candidate(Path(directory))
-            function = candidate / "function-core" / "index.mjs"
-            function.write_text(
-                function.read_text(encoding="utf-8").replace(
-                    "  const validated = lookupTopicInputSchema.parse(input);",
-                    "  const validated = input;",
-                ),
-                encoding="utf-8",
-            )
-            result = run_validator(candidate)
-            self.assertEqual(result.returncode, 1)
-            self.assertIn("fixed node --test: command failed", result.stderr)
-
     def test_rejects_strict_schemas_that_block_extra_agent_context(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             candidate = create_candidate(Path(directory))
             function = candidate / "function-core" / "index.mjs"
             function.write_text(
                 function.read_text(encoding="utf-8").replace(
-                    "z.object({topic: z.string().min(1)})",
-                    "z.object({topic: z.string().min(1)}).strict()",
+                    "}).passthrough();",
+                    "}).strict();",
+                    1,
                 ),
                 encoding="utf-8",
             )
@@ -437,13 +589,15 @@ class CoreExportValidatorTest(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("fixed node --test: command failed", result.stderr)
 
-    def test_package_smoke_catches_unknown_input_forwarding(self) -> None:
+    def test_rejects_schemas_that_silently_strip_extra_agent_context(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             candidate = create_candidate(Path(directory))
             function = candidate / "function-core" / "index.mjs"
             function.write_text(
                 function.read_text(encoding="utf-8").replace(
-                    "query: {topic: validated.topic}", "query: {...validated}"
+                    "}).passthrough();",
+                    "});",
+                    1,
                 ),
                 encoding="utf-8",
             )
@@ -451,42 +605,28 @@ class CoreExportValidatorTest(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("fixed node --test: command failed", result.stderr)
 
-    def test_allows_nonblocking_output_schema_normalization(self) -> None:
+    def test_rejects_business_type_schema_that_blocks_agent_repair(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             candidate = create_candidate(Path(directory))
             function = candidate / "function-core" / "index.mjs"
             function.write_text(
                 function.read_text(encoding="utf-8").replace(
-                    "  return {status: 'success', data: {topic: validated.topic}};",
-                    "  return lookupTopicOutputSchema.parse({status: 'success', data: {topic: validated.topic}});",
+                    "z.unknown().optional().describe('后端接受的主题标识；类型由 Agent 和后端协商')",
+                    "z.string().optional()",
                 ),
                 encoding="utf-8",
             )
             result = run_validator(candidate)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("fixed node --test: command failed", result.stderr)
 
-    def test_does_not_require_invalid_input_business_matrix(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            candidate = create_candidate(Path(directory))
-            test_file = candidate / "tests" / "function.test.mjs"
-            test_file.write_text(
-                test_file.read_text(encoding="utf-8").replace(
-                    "  await assert.rejects(() => lookupTopic({topic: ''}));\n", ""
-                ).replace(
-                    "  await assert.rejects(() => lookupTopic(null));\n", ""
-                ),
-                encoding="utf-8",
-            )
-            result = run_validator(candidate)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_rejects_error_result_marked_as_success(self) -> None:
+    def test_requires_transport_exception_to_reach_agent_as_tool_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             candidate = create_candidate(Path(directory))
             adapter = candidate / "mcp-tool" / "index.mjs"
             source = adapter.read_text(encoding="utf-8")
             adapter.write_text(
-                source.replace("return toMcpResult(result, true);", "return toMcpResult(result, false);"),
+                source.replace("return toAgentError(error);", "return toAgentResult(error);"),
                 encoding="utf-8",
             )
             result = run_validator(candidate)
@@ -566,37 +706,50 @@ class CoreExportValidatorTest(unittest.TestCase):
             function = candidate / "function-core" / "index.mjs"
             source = function.read_text(encoding="utf-8")
             source = source.replace("lookupTopicInputSchema", "topicRequestSchema")
-            source = source.replace("lookupTopicOutputSchema", "topicResultSchema")
             source = source.replace("export const topicRequestSchema", "const topicRequestSchema")
-            source = source.replace("export const topicResultSchema", "const topicResultSchema")
-            source += "export { topicRequestSchema, topicResultSchema };\n"
+            source += "export { topicRequestSchema };\n"
             function.write_text(source, encoding="utf-8")
             adapter = candidate / "mcp-tool" / "index.mjs"
             adapter.write_text(
                 adapter.read_text(encoding="utf-8")
-                .replace("lookupTopicInputSchema", "topicRequestSchema")
-                .replace("lookupTopicOutputSchema", "topicResultSchema"),
+                .replace("lookupTopicInputSchema", "topicRequestSchema"),
                 encoding="utf-8",
             )
             result = run_validator(candidate)
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_requires_output_schema_and_structured_results(self) -> None:
+    def test_allows_optional_open_output_schema_when_explicitly_requested(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             candidate = create_candidate(Path(directory))
             adapter = candidate / "mcp-tool" / "index.mjs"
             adapter.write_text(
-                adapter.read_text(encoding="utf-8").replace("outputSchema", "omittedSchema"),
+                adapter.read_text(encoding="utf-8")
+                .replace(
+                    "import { StdioServerTransport }",
+                    "import { z } from 'zod';\nimport { StdioServerTransport }",
+                )
+                .replace(
+                    "  inputSchema: lookupTopicInputSchema,\n",
+                    "  inputSchema: lookupTopicInputSchema,\n"
+                    "  outputSchema: z.object({}).passthrough(),\n",
+                ),
+                encoding="utf-8",
+            )
+            mcp_test = candidate / "tests" / "mcp.test.mjs"
+            mcp_test.write_text(
+                mcp_test.read_text(encoding="utf-8").replace(
+                    "assert.equal('outputSchema' in replies[1].result.tools[0], false);",
+                    "assert.equal('outputSchema' in replies[1].result.tools[0], true);",
+                ),
                 encoding="utf-8",
             )
             result = run_validator(candidate)
-            self.assertEqual(result.returncode, 1)
-            self.assertIn("outputSchema", result.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_allows_error_normalizer_refactor_when_behavior_stays_green(self) -> None:
+    def test_allows_agent_result_adapter_refactor_when_behavior_stays_green(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             candidate = create_candidate(Path(directory))
-            with (candidate / "portable-error-normalizer.mjs").open(
+            with (candidate / "portable-agent-result.mjs").open(
                 "a", encoding="utf-8"
             ) as stream:
                 stream.write("// drift\n")

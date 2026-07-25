@@ -1,4 +1,4 @@
 interface:
   display_name: "Code2Skill"
   short_description: "将现有代码生成精简可运行的 Function、MCP 与 Skill"
-  default_prompt: "Use $code2skill to convert one application feature into the default compact core-export-v1 Function, MCP, and Agent Skill package. Do not enable strict audit mode unless I explicitly request it."
+  default_prompt: "Use $code2skill on the authorized code scope, identify its independent user goals, and generate the default compact core-export-v1 package with shared Function/MCP capabilities and one Agent Skill per major goal. Keep schemas permissive and pass backend responses to the Agent without business classification. Do not enable strict audit mode unless I explicitly request it."

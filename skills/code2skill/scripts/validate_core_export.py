@@ -23,12 +23,11 @@ from pathlib import Path
 
 CORE_PROFILE = "core-export-v1"
 REQUIRED_FILES = (
-    "SKILL.md",
     "MCP-SETUP.md",
     "package.json",
     "function-core/index.mjs",
     "mcp-tool/index.mjs",
-    "portable-error-normalizer.mjs",
+    "portable-agent-result.mjs",
 )
 STRICT_ONLY_FILES = (
     "approval-audit.json",
@@ -57,17 +56,58 @@ def read_text(path: Path, errors: list[str]) -> str:
         return ""
 
 
-def frontmatter_fields(text: str) -> set[str]:
+def frontmatter_scalar(value: str) -> object:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    lowered = value.lower()
+    if lowered in {"null", "~"}:
+        return None
+    if lowered in {"true", "false"}:
+        return lowered == "true"
+    if value == "[]":
+        return []
+    if value == "{}":
+        return {}
+    if re.fullmatch(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)", value):
+        return float(value)
+    return value
+
+
+def frontmatter_values(text: str) -> dict[str, object]:
     if not text.startswith("---\n"):
-        return set()
+        return {}
     end = text.find("\n---\n", 4)
     if end < 0:
-        return set()
-    return {
-        line.split(":", 1)[0].strip()
-        for line in text[4:end].splitlines()
-        if ":" in line
-    }
+        return {}
+    result: dict[str, object] = {}
+    for line in text[4:end].splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        result[key.strip()] = frontmatter_scalar(value)
+    return result
+
+
+def discover_skill_files(candidate: Path, errors: list[str]) -> list[Path]:
+    """Accept one root Skill or a collection of independent goal Skills."""
+    root_skill = candidate / "SKILL.md"
+    nested_skills = sorted((candidate / "skills").glob("*/SKILL.md"))
+    if root_skill.is_file() and nested_skills:
+        errors.append(
+            "SKILL.md: a root Skill shadows nested skills; use the root file for one "
+            "goal or skills/<goal-id>/SKILL.md for multiple goals, never both"
+        )
+        return [root_skill, *nested_skills]
+    if root_skill.is_file():
+        return [root_skill]
+    if nested_skills:
+        return nested_skills
+    errors.append(
+        "Skill: core-export-v1 requires SKILL.md or at least one "
+        "skills/<goal-id>/SKILL.md"
+    )
+    return []
 
 
 def clean_test_environment() -> dict[str, str]:
@@ -209,14 +249,24 @@ def run_mcp_protocol_probe(candidate: Path, errors: list[str]) -> None:
                     errors.append(
                         f"MCP protocol smoke: Tool {name} annotation {hint} must be boolean"
                     )
-        for field in ("inputSchema", "outputSchema"):
-            schema = tool.get(field)
-            if not isinstance(schema, dict):
-                errors.append(f"MCP protocol smoke: Tool {name} has no {field}")
-            elif schema.get("additionalProperties") is False:
+        input_schema = tool.get("inputSchema")
+        if not isinstance(input_schema, dict):
+            errors.append(f"MCP protocol smoke: Tool {name} has no inputSchema")
+        elif input_schema.get("additionalProperties") is False:
+            errors.append(
+                f"MCP protocol smoke: Tool {name} inputSchema rejects undeclared fields; "
+                "core schemas must remain open"
+            )
+        if "outputSchema" in tool:
+            output_schema = tool.get("outputSchema")
+            if not isinstance(output_schema, dict):
                 errors.append(
-                    f"MCP protocol smoke: Tool {name} {field} rejects undeclared fields; "
-                    "core schemas must remain open"
+                    f"MCP protocol smoke: Tool {name} outputSchema must be an object when declared"
+                )
+            elif output_schema.get("additionalProperties") is False:
+                errors.append(
+                    f"MCP protocol smoke: Tool {name} outputSchema rejects undeclared fields; "
+                    "optional core output schemas must remain open"
                 )
 
 
@@ -236,9 +286,31 @@ def validate(candidate: Path, *, run_tests: bool = True) -> list[str]:
         errors.append(
             "tests: core-export-v1 requires at least one runnable *.test.mjs file"
         )
-    skill = read_text(candidate / "SKILL.md", errors)
-    if not {"name", "description"}.issubset(frontmatter_fields(skill)):
-        errors.append("SKILL.md: frontmatter must contain name and description")
+    skill_files = discover_skill_files(candidate, errors)
+    skill_names: set[str] = set()
+    for skill_path in skill_files:
+        skill = read_text(skill_path, errors)
+        location = skill_path.relative_to(candidate)
+        frontmatter = frontmatter_values(skill)
+        name = frontmatter.get("name")
+        description = frontmatter.get("description")
+        if (
+            not isinstance(name, str)
+            or not name
+            or not isinstance(description, str)
+            or not description
+        ):
+            errors.append(
+                f"{location}: frontmatter must contain non-empty string name and description"
+            )
+            continue
+        if name.isdigit() or re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name) is None:
+            errors.append(
+                f"{location}: frontmatter name must be lowercase words separated by hyphens"
+            )
+        if name in skill_names:
+            errors.append(f"{location}: duplicate Skill name {name!r}")
+        skill_names.add(name)
 
     setup = read_text(candidate / "MCP-SETUP.md", errors)
     for phrase in ("npx skills add", "npm install", "MCP"):
@@ -301,10 +373,12 @@ def validate(candidate: Path, *, run_tests: bool = True) -> list[str]:
 
     function_path = candidate / "function-core" / "index.mjs"
     adapter_path = candidate / "mcp-tool" / "index.mjs"
+    result_adapter_path = candidate / "portable-agent-result.mjs"
     read_text(function_path, errors)
     read_text(adapter_path, errors)
+    read_text(result_adapter_path, errors)
 
-    for path in (function_path, adapter_path):
+    for path in (function_path, adapter_path, result_adapter_path):
         if path.is_file():
             run_check(["node", "--check", str(path)], candidate, path.name, errors)
     if run_tests and package_path.is_file() and test_files:

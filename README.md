@@ -12,7 +12,7 @@ Code2Skill 是一个可移植的 Agent Skill：让具备代码搜索、理解和
 精简 core-export-v1
    ├── Function Core        业务执行
    ├── MCP Tools            标准调用接口
-   ├── SKILL.md             目标、组合、引导与恢复
+   ├── one or more Skills   每个主要用户目标一份独立引导
    └── runnable tests       离线行为保障
    ↓ Consumer Host
 安装 Skill、注册 MCP、渐进完成用户目标
@@ -20,17 +20,17 @@ Code2Skill 是一个可移植的 Agent Skill：让具备代码搜索、理解和
 
 核心原则：
 
-> MCP Tool 提供可组合的执行能力；Skill 提供领域知识、选择策略和默认流程；Agent 根据用户目标决定本次组合；输入 Schema 守住请求可组装的最低边界，只有源码明确证明不可绕过的约束才进入 Handler、Server 或确定性 Workflow。
+> MCP Tool 提供可组合的原子能力；每个 Skill 服务一个主要用户目标；Agent 决定是否调用、如何传参、如何理解结果，以及继续调用还是向用户补问。Code2Skill 负责准确组装请求并尽量完整传递响应，不替 Agent 预判业务结果。
 
 Tool 数量不由页面、接口、请求或函数数量决定，而由独立业务语义、调用价值、契约稳定性和安全复用边界决定。
 
-对客户端功能，Function 和 MCP 的候选能力面以客户端实际发起的后端 API 为主；页面未调用的后端内部方法不会因为“被搜到”就自动暴露为 Tool。授权范围内的后端源码、协议和测试用来补充核对参数、动态值、权限、副作用、幂等与失败规则。如果它们不可用，仍可基于客户端已证明的 API 契约生成诚实的部分产物，但必须标明未知项和安全边界。
+对客户端功能，Function 和 MCP 的候选能力面以客户端实际发起的后端 API 为主；页面未调用的后端内部方法不会因为“被搜到”就自动暴露为 Tool。授权范围内的后端源码、协议和测试默认只用于补齐公开的 Request/Response、鉴权边界、枚举和附件接口；合同足够时停止，不追踪完整 Service、副作用和业务校验。只有公开契约矛盾、操作明显高风险或用户明确要求时才继续深入。如果后端源码不可用，仍可基于客户端已证明的 API 契约生成诚实的部分产物，并标明未知项和运行边界。
 
 源码发现同样不依赖某种语言或固定分层。`DTO`、`Request`、`Schema`、函数参数、协议定义或运行时对象都可能承担“数据传输契约”这一语义角色；文件名和框架惯例只是定位线索，不是事实成立条件。
 
 默认生成不制作完整源码审计档案。需要 Canonical/Goal Contract、Host compatibility、verification matrix、live receipt 或 finalization 时，显式选择兼容的 `strict-export-v1`。严格架构见 [稳定产物架构](skills/code2skill/references/vnext-architecture.md)。
 
-精简包会在 `package.json` 中声明 `code2skill.profile=core-export-v1`，用于防止它被严格审计流水线误当成旧包迁移。Function Core 导出 Zod 输入/输出 Schema，MCP 直接复用；Function 执行输入 Schema，输出 Schema 保持为低约束的可执行边界，真实业务数据尽量原样交给调用 Agent。
+精简包会在 `package.json` 中声明 `code2skill.profile=core-export-v1`，用于防止它被严格审计流水线误当成旧包迁移。Function Core 导出开放的 Zod 输入 Schema 供 MCP 描述参数；默认不声明输出 Schema，避免真实响应在到达 Agent 前因类型、`null` 或字段差异被拦截。
 
 ## 安装
 
@@ -61,7 +61,7 @@ npx skills add . --skill code2skill -a "$AGENT_ID" -g -y
 后端只用于补齐公开 Request/Response，真实接口验证保持关闭。
 ```
 
-目标单位是一个可验证的业务 feature，不要求一定存在前端页面。API、RPC、消息消费者、定时任务或后端编排同样可以生成；默认不生成 `PAGE.md`，复杂业务背景才写入可选的 `references/feature-context.md`。
+用户给出的页面、目录或接口只是搜索范围。Code2Skill 先识别其中可以独立完成的主要用户目标：单一目标生成一个 Skill，多个目标分别生成 Skill，并共享同一套 Function/MCP。API、RPC、消息消费者、定时任务或后端编排同样可以生成；默认不生成 `PAGE.md`，复杂业务背景才写入可选的 `references/feature-context.md`。
 
 也可以用于纠正已有页面级大 Tool：
 
@@ -74,19 +74,26 @@ npx skills add . --skill code2skill -a "$AGENT_ID" -g -y
 
 ```text
 generated/code2skill/<feature-id>/
-├── SKILL.md
+├── SKILL.md                  # 单一主要目标
+├── skills/                   # 多个主要目标时替代根 SKILL.md
+│   ├── <goal-a>/SKILL.md
+│   └── <goal-b>/SKILL.md
 ├── MCP-SETUP.md
 ├── package.json
 ├── function-core/
 │   └── index.mjs
 ├── mcp-tool/
 │   └── index.mjs
-├── portable-error-normalizer.mjs
+├── portable-agent-result.mjs
 ├── tests/
 │   └── *.test.mjs
 └── references/
     └── feature-context.md   # 仅在复杂业务确有必要时生成
 ```
+
+根 `SKILL.md` 与 `skills/*/SKILL.md` 二选一，不能同时存在，避免根 Skill 遮蔽独立目标 Skill。
+
+多目标包中，每个 Skill 需要的参考资料放在它自己的 `references/` 下，避免安装后依赖父目录文件；根 `references/feature-context.md` 只用于单一根 Skill。
 
 默认包不携带重复 Contract、证据目录、Host 报告、MCP 长文档、验证矩阵、收据和 manifest。Function、MCP、Skill 与可运行测试是主要产物；MCP 通过 `package.json` 使用官方 SDK 和 Zod，不再默认内嵌庞大的 SDK bundle。
 
@@ -101,15 +108,15 @@ python3 skills/code2skill/scripts/validate_core_export.py \
 
 校验关注最小运行边界：包结构、依赖声明、JavaScript 语法、真实 MCP `initialize + tools/list` 和包内冒烟测试。它不解析 Function/MCP 的源码模板，因此允许定义表注册、共享 Schema 和共享 wrapper。默认以清理业务凭证后的固定 `node --test` 命令运行测试，不执行候选声明的 npm lifecycle；它不提供网络隔离，因此测试必须 mock 外部请求且不得调用真实业务接口。它不要求非法参数矩阵或逐 Tool MCP 调用，也不生成、验证审计证明或声称业务正确。
 
-生成 Skill 不是死板的页面操作脚本。它应先识别用户目标，复用已经取得且仍有效的信息，只补问或查询当前缺失项；用户只要部分结果时可以提前停止，信息已经齐全时也不应重复调用。派生值和动态值只能由明确能力或可信运行环境提供，不能为了省一次调用而让用户自报。Agent 可以临时组合契约兼容的 MCP Tool 和 Skill；只有源码明确证明的不可绕过边界才成为硬 Workflow。
+生成 Skill 不是死板的页面操作脚本。每个 Skill 独立服务一个主要目标，并描述该目标自己的调用链；共享 Tool 只是原子能力，不形成跨 Skill 的全局流程。Agent 可以复用已有信息、只补问当前缺失项、跳过不需要的 Tool、根据响应修正调用，或者先与用户沟通。
 
 字段含义必须按来源、赋值过程和最终用途判断，不能按名称猜测。同名的查询参数和写入参数如果语义不同，应在公共 Function/MCP/Skill 中分别使用能表达“目录筛选”和“最终操作”等真实用途的名称，内部再映射回 API 原字段。公共能力也不等于全局前置条件；每个写能力只采用其直接客户端调用链证明的前置步骤。
 
-输入 Schema 只约束组装已知请求所需的最低结构：调用方附带的未知字段可以被接受，但 Function 只发送源码证明需要的字段。不要显式关闭 `additionalProperties`，也不要把未知字段透传给业务 API。前端条件必填信息优先写入 Skill 进行引导，普通业务是否接受最终由后端决定。
+输入 Schema 主要用于提示 Agent 已知参数：使用开放对象，业务字段默认采用带说明的宽松值，不生成会提前拦截常见类型差异、`null`、缺失或额外参数的严格规则。Function 仍按源码证明的字段来源和用途组装固定接口；额外参数保留给 callback 和 Agent，但没有可证明的发送位置时不能猜测位置或假装已经发送。
 
-输出 Schema 是低约束的可执行边界，不是业务完整性证明。由于 MCP SDK 会校验它，core 包必须传入完整的开放 Zod 对象，而不是 `.shape`；只有客户端适配、公开契约或多个可信样本证明存在变体时才放宽具体类型，不从单一样本收窄。最低 HTTP 状态、公开响应信封和明确业务拒绝仍由 Function 识别；业务数据和控制字段缺失或无法识别时，保留原始响应并由 Agent 提示信息不足，不得默认通过后续写入。
+core 包默认不声明输出 Schema。基于 `fetch` 的 Function 收到任何 HTTP 状态都返回 `httpStatus` 和未经截断、未经 JSON 转换的完整 `bodyText`。如果所用客户端会因 4xx/5xx 抛出带响应的异常，Function 仍将其中的状态和响应数据还原为普通结果。400、500、业务 `code`、非 JSON、长正文、`null` 和缺失字段都交给 Agent；Code2Skill 不添加成功、失败、是否重试或结果是否未知等判断。
 
-普通业务校验以真实后端 API 为权威边界，Function/MCP 不重写整套后端规则。运行时保留可机器区分的业务、权限、网络、响应格式和未知写入结果错误。只有源码明确证明不可绕过的安全边界时才生成确定性 Guard；页面确认框和普通 POST 不足以证明自定义 Host Guard。
+普通业务校验以真实后端 API 为权威边界，Function/MCP 不重写整套后端规则。已取得 HTTP 响应时作为普通 Tool 结果原样传递；只有没有取得响应的底层异常才使用 MCP `isError` 传递其原始可序列化信息，不生成 Code2Skill 自己的错误分类。Agent 决定如何解释、补问、修正或再次调用。
 
 附件接收属于 Consumer Host；Code2Skill 只生成源码证明的业务上传与下游绑定。优先使用 `attachmentRef` 等不透明引用；只有 Host 明确保证来源与可访问性时，才把运行时注入的路径公开为 `hostFilePath`。这是一项部署信任前提，不是 Skill 文案能证明的安全保证；条件不满足时应报告附件运行条件未满足。Code2Skill 不实现消息接入、下载或通用 Host 沙箱。如果只能取得 STS/预签名凭证而无法完成上传，应明确说明目标未闭环，不能接受用户自报 URL 来伪装完成。
 
