@@ -20,6 +20,12 @@ Function 和 MCP 提供业务能力，Skill 负责引导 Agent 使用这些能�
 - 为主要目标分别生成 Skill，并复用必要的 Function 和 MCP Tool。
 - 默认只做离线技术验证，不主动调用真实业务接口。
 
+## 可以用哪些 Agent
+
+可以使用 Codex、Claude Code、Kimi Code 等主流编程 Agent 运行 Code2Skill。生成后的 Skill 可以安装到 Codex、Claude Code、Cursor、OpenClaw 等支持 Agent Skills 的环境。
+
+更多环境见 [`skills` CLI 支持列表](https://github.com/vercel-labs/skills#supported-agents)。需要执行真实业务操作时，还需按照生成结果中的 `MCP-SETUP.md` 注册 MCP。
+
 ## 安装
 
 使用通用 Agent Skills CLI 一次安装三个 Skill：
@@ -78,9 +84,9 @@ generated/code2skill/<feature-id>/
 
 | 生成模型/运行配置 | 生成日期 | 生成耗时 | 综合参考分 |
 |---|---|---:|---:|
-| Codex（Ultra） | 2026-07-24 | 47 分 45 秒 | **9.4** |
-| Kimi Code（K3） | 2026-07-24 | 约 93 分钟 | **8.9** |
-| Codex（High） | 2026-07-24 | 20 分 29 秒 | **8.4** |
+| GPT-5.6 Sol（Ultra 模式） | 2026-07-24 | 47 分 45 秒 | **9.4** |
+| Kimi K3（Max 推理档位） | 2026-07-24 | 约 93 分钟 | **8.9** |
+| GPT-5.6 Sol（High 推理档位） | 2026-07-24 | 20 分 29 秒 | **8.4** |
 
 耗时统计到生成和当轮离线验证完成，不包含之后单独进行的评分、目录调整、安装或部署。评分方法、两套评分体系和隐私边界见[完整评估报告](docs/evaluation.md)。
 

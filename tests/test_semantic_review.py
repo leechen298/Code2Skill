@@ -255,16 +255,16 @@ class SplitReviewSkillsTest(unittest.TestCase):
         )
         self.assertIn("(docs/evaluation.md)", readme)
         for expected in (
-            "| Codex（Ultra） | 2026-07-24 | 47 分 45 秒 | **9.6** | **9.0** | **9.4** |",
-            "| Kimi Code（K3） | 2026-07-24 | 约 93 分钟 | **9.5** | **8.0** | **8.9** |",
-            "| Codex（High） | 2026-07-24 | 20 分 29 秒 | **9.0** | **7.5** | **8.4** |",
+            "| GPT-5.6 Sol（Ultra 模式） | 2026-07-24 | 47 分 45 秒 | **9.6** | **9.0** | **9.4** |",
+            "| Kimi K3（Max 推理档位） | 2026-07-24 | 约 93 分钟 | **9.5** | **8.0** | **8.9** |",
+            "| GPT-5.6 Sol（High 推理档位） | 2026-07-24 | 20 分 29 秒 | **9.0** | **7.5** | **8.4** |",
         ):
             with self.subTest(score=expected):
                 self.assertIn(expected, report)
         for expected in (
-            "| Codex（Ultra） | 2026-07-24 | 47 分 45 秒 | **9.4** |",
-            "| Kimi Code（K3） | 2026-07-24 | 约 93 分钟 | **8.9** |",
-            "| Codex（High） | 2026-07-24 | 20 分 29 秒 | **8.4** |",
+            "| GPT-5.6 Sol（Ultra 模式） | 2026-07-24 | 47 分 45 秒 | **9.4** |",
+            "| Kimi K3（Max 推理档位） | 2026-07-24 | 约 93 分钟 | **8.9** |",
+            "| GPT-5.6 Sol（High 推理档位） | 2026-07-24 | 20 分 29 秒 | **8.4** |",
         ):
             with self.subTest(readme_summary=expected):
                 self.assertIn(expected, readme)
@@ -312,6 +312,17 @@ class SplitReviewSkillsTest(unittest.TestCase):
             130,
             "README should remain a concise project entrypoint",
         )
+        for concept in (
+            "## 可以用哪些 Agent",
+            "Codex、Claude Code、Kimi Code",
+            "Claude Code",
+            "Cursor",
+            "OpenClaw",
+            "更多环境见",
+            "还需按照生成结果中的 `MCP-SETUP.md` 注册 MCP",
+        ):
+            with self.subTest(agent_compatibility=concept):
+                self.assertIn(concept, readme)
         for label, path in expected_docs.items():
             with self.subTest(document=label):
                 self.assertTrue(path.is_file())
@@ -329,6 +340,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
             '"env"',
             "mcpServers",
             "不是 MCP 协议",
+            "`openclaw`",
         ):
             with self.subTest(concept=concept):
                 self.assertIn(concept, installation)

@@ -20,7 +20,7 @@ npx skills add leechen298/Code2Skill \
   --yes
 ```
 
-`$AGENT_ID` 使用 `skills` CLI 支持的 Agent 标识，例如 `codex`、`openclaw` 或 `kimi-code-cli`。项目级安装时去掉 `--global`；本地开发时把仓库地址替换为 `.`。
+`$AGENT_ID` 使用 [`skills` CLI 支持的 Agent 标识](https://github.com/vercel-labs/skills#supported-agents)，例如 `codex`、`claude-code`、`kimi-code-cli`、`cursor` 或 `openclaw`。项目级安装时去掉 `--global`；本地开发时把仓库地址替换为 `.`。
 
 查看、更新和移除：
 
@@ -57,6 +57,8 @@ npx skills add ./generated/code2skill/<feature-id> \
 ```
 
 这一步只安装 Skill 知识与引导文件，不会安装 Node 依赖、启动 MCP、注入认证或验证真实业务。
+
+对于只需要阅读、分析或引导的 Skill，安装完成后即可使用。对于需要调用业务接口的生成结果，目标 Agent/Host 还必须具备 MCP Client 能力，并继续完成下面的依赖安装和 MCP 注册。
 
 ## 安装 MCP 依赖
 
