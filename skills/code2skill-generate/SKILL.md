@@ -1,6 +1,6 @@
 ---
 name: code2skill-generate
-description: 从已有前端、后端或全栈代码中提取一个业务功能，生成精简、可运行、可安装的 Function、MCP 和 Agent Skill；适用于页面功能、接口功能、业务流程及已有生成包的修正。
+description: 从已有前端、后端或全栈代码中提取业务功能，生成可运行、可安装的 Function、MCP 和 Agent Skill；适用于页面功能、接口功能、业务流程及已有生成结果的修正。
 ---
 
 # Code2Skill
@@ -9,7 +9,7 @@ description: 从已有前端、后端或全栈代码中提取一个业务功能�
 
 使用当前编程 Agent 搜索、理解和修改用户授权的代码；不要另建扫描器或把某种多 Agent 能力当作运行前提。生成包的 Consumer 可能不是当前编程 Agent，因此不得假设它能读取原仓库、Producer 机器上的任意文件或 Producer 的会话状态。Consumer Host 显式交给 Tool 的受控附件路径或附件引用除外。
 
-## 默认交付：core-export-v1
+## 默认生成结果
 
 除非用户明确要求严格审计，默认只生成：
 
@@ -20,7 +20,7 @@ generated/code2skill/<feature-id>/
 │   ├── <goal-a>/SKILL.md
 │   └── <goal-b>/SKILL.md
 ├── MCP-SETUP.md
-├── package.json              # 声明 code2skill.profile=core-export-v1
+├── package.json              # 包信息、运行脚本和依赖
 ├── function-core/
 │   └── index.mjs
 ├── mcp-tool/
@@ -151,7 +151,7 @@ python3 <skill-root>/scripts/validate_core_export.py \
   generated/code2skill/<feature-id>
 ```
 
-`package.json` 必须包含 `"code2skill": {"profile": "core-export-v1"}`。精简校验器会执行语法检查，真实启动 MCP 完成 `initialize + tools/list`，并以凭证清理后的固定 `node --test` 命令运行包内测试；它不解析源码模板、不安装依赖，也不宣称网络隔离，因此有 lockfile 时先运行 `npm ci`，否则运行 `npm install`。测试自身仍必须 mock 外部请求并遵守 `CODE2SKILL_DRY_RUN=1`。只有排查包结构时才使用 `--skip-tests`，此时结果不得称为“已验证可运行”。
+`package.json` 必须包含 `"code2skill": {"profile": "core-export-v1"}`，供校验程序识别目录格式。默认校验器会执行语法检查，真实启动 MCP 完成 `initialize + tools/list`，并以凭证清理后的固定 `node --test` 命令运行包内测试；它不解析源码模板、不安装依赖，也不宣称网络隔离，因此有 lockfile 时先运行 `npm ci`，否则运行 `npm install`。测试自身仍必须 mock 外部请求并遵守 `CODE2SKILL_DRY_RUN=1`。只有排查包结构时才使用 `--skip-tests`，此时结果不得称为“已验证可运行”。
 
 测试代码保留在包内，测试日志和收据不保留。这些测试只证明包能加载、注册并按已知客户端契约组装基本请求，不证明所有业务规则、真实响应或端到端流程正确。真实接口验证是显式授权后的可选动作，默认关闭；写接口永不自动调用。若某个能力无法离线证明，应在 Skill 或交付说明中写清边界，不要为通过验收生成伪证据。
 
@@ -161,9 +161,9 @@ python3 <skill-root>/scripts/validate_core_export.py \
 
 `code2skill-generate` 不自行声明主流程完整或源码精确。需要独立判断主要目标和代表性标准路径是否闭环时，交给 `code2skill-review-flow`；需要进一步核对字段来源、确定性转换和关键依赖时，交给 `code2skill-review-source`。
 
-## 严格审计模式（显式开启）
+## 高级验证（显式开启）
 
-`strict-export-v1` 保留兼容，但不再默认执行。只有用户明确要求以下任一内容时才启用：完整证据链、Canonical/Goal Contract、Host compatibility、逐能力 verification matrix、live receipt、finalization、完整 manifest、外部 evaluator 或合规/高风险审计。
+内部的 `strict-export-v1` 格式保留兼容，但不再默认执行。只有用户明确要求以下任一内容时才启用：完整证据链、Canonical/Goal Contract、Host compatibility、逐能力 verification matrix、live receipt、finalization、完整 manifest、外部 evaluator 或合规/高风险审计。
 
 不要因为用户说“稳定”“可用”“完整”就自行升级到严格模式。升级前说明它会扩大源码范围、产物和耗时。
 

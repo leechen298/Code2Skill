@@ -228,11 +228,9 @@ class SplitReviewSkillsTest(unittest.TestCase):
             "--skill code2skill-generate code2skill-review-flow code2skill-review-source",
             readme,
         )
-        self.assertIn("`code2skill-review-flow`：从源码独立识别主要目标", readme)
-        self.assertIn("`code2skill-review-source`：对指定目标或能力", readme)
-        self.assertIn("三个 Skill 不强制串行", readme)
-        self.assertIn("旧生成名 `code2skill` 已更名为 `code2skill-generate`", readme)
-        self.assertIn("`code2skill-review` 也已拆分", readme)
+        self.assertIn("`code2skill-review-flow`：检查用户能否通过主要流程", readme)
+        self.assertIn("`code2skill-review-source`：深入检查请求字段", readme)
+        self.assertIn("两个 Review Skill 按需独立使用", readme)
         installation = read(REPO_ROOT / "docs" / "installation.md")
         self.assertIn("从 `code2skill` 更名为 `code2skill-generate`", installation)
         self.assertIn(
@@ -247,7 +245,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
         report = read(ANON_EVALUATION)
         readme = read(REPO_ROOT / "README.md")
 
-        self.assertIn("# Code2Skill 生成产物评估", report)
+        self.assertIn("# Code2Skill 生成结果评估", report)
         self.assertIn("不能用于还原原始业务", report)
         self.assertIn("Function/MCP 能力覆盖与请求正确性合计 **6 分**", report)
         self.assertIn("本次评估不使用三个生成结果各自生成的 Review 报告", report)
@@ -255,15 +253,23 @@ class SplitReviewSkillsTest(unittest.TestCase):
             "最终产物无法可靠证明 Producer 实际读取了哪些源码文件",
             report,
         )
-        self.assertIn("[评估报告](docs/evaluation.md)", readme)
+        self.assertIn("(docs/evaluation.md)", readme)
         for expected in (
-            "| Codex（Ultra） | **9.6** | **9.0** | **9.4** |",
-            "| Kimi Code（K3） | **9.5** | **8.0** | **8.9** |",
-            "| Codex（High） | **9.0** | **7.5** | **8.4** |",
+            "| Codex（Ultra） | 2026-07-24 | 47 分 45 秒 | **9.6** | **9.0** | **9.4** |",
+            "| Kimi Code（K3） | 2026-07-24 | 约 93 分钟 | **9.5** | **8.0** | **8.9** |",
+            "| Codex（High） | 2026-07-24 | 20 分 29 秒 | **9.0** | **7.5** | **8.4** |",
         ):
             with self.subTest(score=expected):
                 self.assertIn(expected, report)
+        for expected in (
+            "| Codex（Ultra） | 2026-07-24 | 47 分 45 秒 | **9.4** |",
+            "| Kimi Code（K3） | 2026-07-24 | 约 93 分钟 | **8.9** |",
+            "| Codex（High） | 2026-07-24 | 20 分 29 秒 | **8.4** |",
+        ):
+            with self.subTest(readme_summary=expected):
                 self.assertIn(expected, readme)
+        self.assertIn("## 生成耗时口径", report)
+        self.assertIn("不用于推断模型的一般速度", report)
         for marker in (
             "http://",
             "https://",
@@ -296,8 +302,8 @@ class SplitReviewSkillsTest(unittest.TestCase):
         readme = read(REPO_ROOT / "README.md")
         expected_docs = {
             "installation": REPO_ROOT / "docs" / "installation.md",
-            "core export": REPO_ROOT / "docs" / "core-export.md",
-            "strict export": REPO_ROOT / "docs" / "strict-export.md",
+            "generated results": REPO_ROOT / "docs" / "generated-results.md",
+            "advanced validation": REPO_ROOT / "docs" / "advanced-validation.md",
             "evaluation": ANON_EVALUATION,
         }
 

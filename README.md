@@ -1,27 +1,24 @@
 # Code2Skill
 
-Code2Skill 是一个可移植的 Agent Skill：让具备代码搜索、理解和测试能力的编程 Agent，从授权的前端、后端或全栈代码中提取业务功能，生成精简、可运行、可安装的 Function、MCP Tools 和 Agent Skills。
+Code2Skill 是一组可安装的 Agent Skills。它帮助编程 Agent 从用户授权的前端、后端或全栈代码中理解业务功能，并生成可供其他 Agent 使用的 Function、MCP Tools、业务 Skills 和离线测试。
 
 ```text
-授权源码
-  ↓ Producer 编程 Agent
-core-export-v1
-  ├── Function Core       组装并执行真实业务请求
-  ├── MCP Tools           提供可组合的原子能力
-  ├── one or more Skills  每个主要用户目标一份引导
-  └── runnable tests      离线技术保障
-  ↓ Consumer Agent / Host
-渐进收集信息并完成用户目标
+现有代码
+  ↓ Code2Skill
+Function + MCP Tools + Skills + Tests
+  ↓
+Agent 逐步取得信息并完成用户目标
 ```
 
-核心原则：
+Function 和 MCP 提供业务能力，Skill 负责引导 Agent 使用这些能力。是否调用、如何补问、如何理解接口响应以及下一步做什么，由实际调用的 Agent 决定。
 
-> Function/MCP 负责准确提供能力和尽量完整传递响应；Skill 负责目标引导；Agent 决定是否调用、如何补问、如何理解结果和下一步做什么。
+## 它会做什么
 
-- 客户端功能以前端实际调用的后端 API 为主要能力面；后端源码默认只用于补齐公开 Request/Response、枚举、认证和附件接口。
-- 用户指定的页面或目录是搜索范围，不是一个固定 Skill；多个独立目标会生成多个 Skill，并共享必要的 Function/MCP。
-- 源码明确的字段来源和确定性转换进入 Function；普通业务判断和后端反馈交给调用 Agent。
-- 默认生成精简 `core-export-v1`；只有明确需要完整证据链或合规审计时才使用 `strict-export-v1`。
+- 以前端实际调用的后端接口为主要能力来源，按需读取后端公开请求和响应结构。
+- 从用户指定的页面、目录或功能中识别可以独立完成的主要目标。
+- 将字段来源、请求组装和确定性的格式转换写入 Function。
+- 为主要目标分别生成 Skill，并复用必要的 Function 和 MCP Tool。
+- 默认只做离线技术验证，不主动调用真实业务接口。
 
 ## 安装
 
@@ -35,36 +32,31 @@ npx skills add leechen298/Code2Skill \
   --yes
 ```
 
-本地开发时把仓库地址替换为 `.`。三个 Skill 可以独立使用：
-
 - `code2skill-generate`：生成 Function、MCP、业务 Skill 和离线测试。
-- `code2skill-review-flow`：从源码独立识别主要目标，检查代表性标准路径。
-- `code2skill-review-source`：对指定目标或能力深入检查字段来源、转换、调用链和关键依赖。
+- `code2skill-review-flow`：检查用户能否通过主要流程完成目标。
+- `code2skill-review-source`：深入检查请求字段、转换和调用链是否符合源码。
 
-旧生成名 `code2skill` 已更名为 `code2skill-generate`，旧名称不再保留为重复入口；`code2skill-review` 也已拆分。三个 Skill 不强制串行，日常生成只需 `code2skill-generate`。
-
-`npx skills add` 只安装 Skill。生成包的依赖安装和 MCP 注册是独立步骤，详见[安装与 MCP 注册](docs/installation.md)。
+日常生成只需要 `code2skill-generate`，两个 Review Skill 按需独立使用。旧版本迁移、生成结果的依赖安装和 MCP 注册见[安装说明](docs/installation.md)。
 
 ## 快速使用
 
-在目标代码仓库中调用，并明确所有允许搜索的源码根目录：
+在目标代码仓库中调用，并明确允许搜索的源码范围：
 
 ```text
-使用 $code2skill-generate，把 /knowledge 的客户端功能生成为默认精简能力包。
-允许搜索的源码根目录：当前前端仓库、../service、../contracts。
-请以前端实际调用接口为能力面，实现 Function、MCP、Skill 和离线测试；
-后端只用于补齐公开 Request/Response，真实接口验证保持关闭。
+使用 $code2skill-generate，把 <页面、目录或功能路径> 生成为可运行的 Function、MCP 和 Skills。
+允许搜索的源码根目录：<前端目录>、<后端目录>、<协议目录>。
+以前端实际调用的接口为主要能力来源，不调用真实业务接口。
 ```
 
-按需独立复核：
+需要复核时：
 
 ```text
-使用 $code2skill-review-flow，审核 <生成包路径> 的主要目标和代表性标准路径是否闭环。
+使用 $code2skill-review-flow，审核 <生成结果路径> 的主要目标是否能够完成。
 
-使用 $code2skill-review-source，审核 <生成包路径> 中 <指定 Skill 或能力> 与授权源码的请求语义是否一致。
+使用 $code2skill-review-source，审核 <生成结果路径> 中 <指定 Skill 或能力> 与授权源码是否一致。
 ```
 
-## 默认产物
+## 生成结果
 
 ```text
 generated/code2skill/<feature-id>/
@@ -78,41 +70,26 @@ generated/code2skill/<feature-id>/
 └── references/feature-context.md  # 复杂业务才生成
 ```
 
-默认包不携带重复 Contract、证据目录、Host 报告、验证矩阵或收据。完整产物规则见 [`core-export-v1`](docs/core-export.md)。
+每个生成目录的 `MCP-SETUP.md` 会说明依赖安装、启动方式、环境变量和 MCP 注册方法。Skill 已安装、MCP 已连接和真实业务已验证是三个独立状态。
 
-## 离线验证
+## 生成效果参考
 
-```bash
-cd generated/code2skill/<feature-id> && npm install
-cd -
-python3 skills/code2skill-generate/scripts/validate_core_export.py \
-  generated/code2skill/<feature-id>
-```
+同一份匿名、多目标源码的三次生成记录：
 
-验证覆盖包结构、依赖声明、JavaScript 语法、MCP `initialize + tools/list` 和包内测试；默认不调用真实业务接口。
+| 生成模型/运行配置 | 生成日期 | 生成耗时 | 综合参考分 |
+|---|---|---:|---:|
+| Codex（Ultra） | 2026-07-24 | 47 分 45 秒 | **9.4** |
+| Kimi Code（K3） | 2026-07-24 | 约 93 分钟 | **8.9** |
+| Codex（High） | 2026-07-24 | 20 分 29 秒 | **8.4** |
 
-## 生成质量评估
-
-同一私有、多目标源码范围的三次独立生成结果。业务内容保持匿名，但生成模型/运行配置公开：
-
-| 生成模型/运行配置 | 主流程完成度 | 业务语义精确度 | 综合参考分 |
-|---|---:|---:|---:|
-| Codex（Ultra） | **9.6** | **9.0** | **9.4** |
-| Kimi Code（K3） | **9.5** | **8.0** | **8.9** |
-| Codex（High） | **9.0** | **7.5** | **8.4** |
-
-- **主流程完成度**：用户能否通过 Skill 与 Function/MCP 完成代表性工作，允许 Agent 处理可恢复差异。
-- **业务语义精确度**：生成结果是否准确还原接口、字段来源、确定性转换和目标分支。
-
-综合参考分采用 `主流程 × 60% + 业务语义 × 40%`，反映当前“先保证主要工作可用”的产品目标。评估从源码重新建立基线，不采用生成结果自己的 Review 报告，也没有调用真实业务接口。完整口径、方法、扣分规则、规模与边界见[评估报告](docs/evaluation.md)。
+耗时统计到生成和当轮离线验证完成，不包含之后单独进行的评分、目录调整、安装或部署。评分方法、两套评分体系和隐私边界见[完整评估报告](docs/evaluation.md)。
 
 ## 文档
 
-- [文档索引](docs/README.md)
-- [安装 Skill、依赖与注册 MCP](docs/installation.md)
-- [默认 `core-export-v1` 产物规范](docs/core-export.md)
-- [可选 `strict-export-v1` 流水线](docs/strict-export.md)
-- [生成模型与产物评估](docs/evaluation.md)
-- [稳定产物架构](skills/code2skill-generate/references/vnext-architecture.md)
+- [安装 Skill、生成结果依赖与注册 MCP](docs/installation.md)
+- [生成结果的结构和设计原则](docs/generated-results.md)
+- [可选的高级验证流程](docs/advanced-validation.md)
+- [生成模型、评分方法与匿名评估结果](docs/evaluation.md)
+- [完整文档索引](docs/README.md)
 
-Skill 遵循 [Agent Skills specification](https://agentskills.io/specification)，安装使用 [vercel-labs/skills](https://github.com/vercel-labs/skills)。MCP 产物使用标准 stdio 或 Streamable HTTP 传输，不要求 Consumer Host 采用 Code2Skill 私有配置格式。
+Skill 遵循 [Agent Skills specification](https://agentskills.io/specification)，安装使用 [vercel-labs/skills](https://github.com/vercel-labs/skills)。生成的 MCP 使用标准 stdio 或 Streamable HTTP 传输。

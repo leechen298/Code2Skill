@@ -370,8 +370,8 @@ class CoreExportValidatorTest(unittest.TestCase):
         core_context = (
             SKILL_ROOT / "assets" / "core-feature-context.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("默认交付：core-export-v1", skill)
-        self.assertIn("strict-export-v1` 保留兼容，但不再默认执行", skill)
+        self.assertIn("默认生成结果", skill)
+        self.assertIn("`strict-export-v1` 格式保留兼容，但不再默认执行", skill)
         self.assertIn("不要在默认包中生成 Canonical/Goal Contract", skill)
         self.assertIn("不要仅凭字段名判断语义", skill)
         self.assertIn("每个 Skill 只服务一个主要用户目标", skill)

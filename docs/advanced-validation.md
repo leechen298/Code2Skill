@@ -1,6 +1,6 @@
-# `strict-export-v1` 流水线
+# 高级验证流程
 
-只有用户明确要求完整证据链、Canonical/Goal Contract、Host compatibility、逐能力验证、live receipt、finalization、manifest、外部 evaluator 或合规审计时，才使用 `strict-export-v1`。不要从“稳定”或“可用”自动推断严格模式。
+只有用户明确要求完整证据链、Canonical/Goal Contract、Host compatibility、逐能力验证、live receipt、finalization、manifest、外部 evaluator 或合规审计时，才使用高级验证流程。程序内部使用 `strict-export-v1` 识别这套兼容格式；不要从“稳定”或“可用”自动推断需要启用它。
 
 严格模式保留完整产物、校验器和分阶段流水线，兼容旧包；它不是默认交付。
 

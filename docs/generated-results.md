@@ -1,6 +1,6 @@
-# `core-export-v1` 产物规范
+# 生成结果的结构和设计原则
 
-`core-export-v1` 是 Code2Skill 的默认输出。目标是稳定生成完成主要业务目标所需的最少可运行内容，而不是制作完整源码审计档案。
+Code2Skill 默认生成完成主要业务目标所需的可运行内容，而不是制作完整源码审计档案。程序内部仍使用 `core-export-v1` 识别这一目录格式，普通使用者不需要理解或填写这个名称。
 
 ## 能力发现
 
@@ -29,7 +29,7 @@
 
 Tool 数量由独立业务语义、调用价值、契约稳定性和安全复用边界决定，不由页面、接口或函数数量机械决定。
 
-## 默认目录
+## 生成目录
 
 ```text
 generated/code2skill/<feature-id>/
@@ -49,7 +49,7 @@ generated/code2skill/<feature-id>/
 
 根 `SKILL.md` 和 `skills/*/SKILL.md` 二选一。多目标包中，每个 Skill 需要的参考资料放在自己的 `references/` 下，不能依赖安装后不存在的父目录文件。
 
-默认包不携带重复 Contract、证据目录、Host 报告、验证矩阵、收据或 manifest。`package.json` 声明 `code2skill.profile=core-export-v1`。
+生成目录不携带重复 Contract、证据目录、Host 报告、验证矩阵、收据或 manifest。`package.json` 中的 `code2skill.profile=core-export-v1` 仅供校验程序识别格式。
 
 ## 请求语义
 
