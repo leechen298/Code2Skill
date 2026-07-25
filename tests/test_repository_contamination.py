@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = REPO_ROOT / "skills" / "code2skill"
+SKILL_ROOT = REPO_ROOT / "skills" / "code2skill-generate"
 TEXT_SUFFIXES = {".json", ".md", ".mjs", ".py", ".yaml", ".yml", ".txt"}
 
 
@@ -41,6 +41,7 @@ class RepositoryContaminationTest(unittest.TestCase):
             ".gitignore",
             "LICENSE",
             "README.md",
+            "docs",
             "skills",
             "tests",
         }
@@ -180,6 +181,8 @@ class RepositoryContaminationTest(unittest.TestCase):
         self.assertIn("可移植定位符", context)
         self.assertIn("npx skills add", setup)
         self.assertIn("只安装 Skill", setup)
+        self.assertIn("stdio", setup)
+        self.assertIn("Streamable HTTP", setup)
         for topic in ("MCP 启动", "MCP 注册", "认证", "环境变量"):
             self.assertIn(topic, setup)
 

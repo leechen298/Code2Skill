@@ -1,5 +1,5 @@
 ---
-name: code2skill
+name: code2skill-generate
 description: 从已有前端、后端或全栈代码中提取一个业务功能，生成精简、可运行、可安装的 Function、MCP 和 Agent Skill；适用于页面功能、接口功能、业务流程及已有生成包的修正。
 ---
 
@@ -7,7 +7,7 @@ description: 从已有前端、后端或全栈代码中提取一个业务功能�
 
 把已有应用中的业务能力转换成其他 Agent 可以使用的 Function、MCP Tools 和 Skill。默认目标是生成一份小而可靠的运行包，不是为源码制作审计档案。
 
-使用当前编程 Agent 搜索、理解和修改用户授权的代码；不要另建扫描器或自治 Agent。生成包的 Consumer 可能不是当前编程 Agent，因此不得假设它能读取原仓库、Producer 机器上的任意文件或 Producer 的会话状态。Consumer Host 显式交给 Tool 的受控附件路径或附件引用除外。
+使用当前编程 Agent 搜索、理解和修改用户授权的代码；不要另建扫描器或把某种多 Agent 能力当作运行前提。生成包的 Consumer 可能不是当前编程 Agent，因此不得假设它能读取原仓库、Producer 机器上的任意文件或 Producer 的会话状态。Consumer Host 显式交给 Tool 的受控附件路径或附件引用除外。
 
 ## 默认交付：core-export-v1
 
@@ -135,7 +135,7 @@ MCP 必须声明输入 Schema，但默认把它当作给 Agent 的参数说明�
 
 当背景知识较短时直接写入 `SKILL.md`；只有内容会明显干扰使用说明时，才生成 `references/feature-context.md`。不要重复维护同一段知识。
 
-`MCP-SETUP.md` 使用 `assets/core-MCP-SETUP.md` 作为起点，保持简短，只说明：`npx skills add` 只安装 Skill；`npm install` 安装 MCP 依赖；如何启动/注册 MCP；如何注入认证和 dry-run 环境变量；安装、可达、真实验证和部署是不同状态。可选背景文档使用 `assets/core-feature-context.md` 的精简结构；不要把 strict-export-vNext 的模板复制进默认包。
+`MCP-SETUP.md` 使用 `assets/core-MCP-SETUP.md` 作为起点，保持简短，并在交付前替换或删除全部占位符。它只说明：`npx skills add` 只安装 Skill；有 lockfile 时用 `npm ci` 安装依赖、否则用 `npm install`；本地 MCP 按标准 stdio 的 `command/args/cwd/env` 中立启动参数注册，独立部署的远程服务才使用 Streamable HTTP；如何注入认证和 dry-run 环境变量；安装、注册、连通、真实验证和部署是不同状态。不要把某个 Host 的 `mcpServers` 等配置惯例写成协议要求。可选背景文档使用 `assets/core-feature-context.md` 的精简结构；不要把 strict-export-vNext 的模板复制进默认包。
 
 ### 7. 离线验证
 
@@ -151,13 +151,15 @@ python3 <skill-root>/scripts/validate_core_export.py \
   generated/code2skill/<feature-id>
 ```
 
-`package.json` 必须包含 `"code2skill": {"profile": "core-export-v1"}`。精简校验器会执行语法检查，真实启动 MCP 完成 `initialize + tools/list`，并以凭证清理后的固定 `node --test` 命令运行包内测试；它不解析源码模板、不安装依赖，也不宣称网络隔离，因此先运行 `npm install`，测试自身仍必须 mock 外部请求并遵守 `CODE2SKILL_DRY_RUN=1`。只有排查包结构时才使用 `--skip-tests`，此时结果不得称为“已验证可运行”。
+`package.json` 必须包含 `"code2skill": {"profile": "core-export-v1"}`。精简校验器会执行语法检查，真实启动 MCP 完成 `initialize + tools/list`，并以凭证清理后的固定 `node --test` 命令运行包内测试；它不解析源码模板、不安装依赖，也不宣称网络隔离，因此有 lockfile 时先运行 `npm ci`，否则运行 `npm install`。测试自身仍必须 mock 外部请求并遵守 `CODE2SKILL_DRY_RUN=1`。只有排查包结构时才使用 `--skip-tests`，此时结果不得称为“已验证可运行”。
 
 测试代码保留在包内，测试日志和收据不保留。这些测试只证明包能加载、注册并按已知客户端契约组装基本请求，不证明所有业务规则、真实响应或端到端流程正确。真实接口验证是显式授权后的可选动作，默认关闭；写接口永不自动调用。若某个能力无法离线证明，应在 Skill 或交付说明中写清边界，不要为通过验收生成伪证据。
 
 ### 8. 交付报告
 
 只报告用户真正需要的状态：生成了哪些能力、离线测试是否通过、是否调用过真实环境、是否安装/注册/部署，以及仍存在的具体限制。不要把“文件已生成”“MCP 能启动”“真实业务已验证”和“已部署”混成一个结论。
+
+`code2skill-generate` 不自行声明主流程完整或源码精确。需要独立判断主要目标和代表性标准路径是否闭环时，交给 `code2skill-review-flow`；需要进一步核对字段来源、确定性转换和关键依赖时，交给 `code2skill-review-source`。
 
 ## 严格审计模式（显式开启）
 
@@ -189,5 +191,6 @@ python3 <skill-root>/scripts/validate_core_export.py \
 - 不把公共能力升级成未经证明的全局前置步骤。
 - 不生成任意 `call_api` 或 Agent 自行构造的本地路径上传逃生口；Host 明确担保来源与可访问性的附件路径可以作为业务上传输入。
 - 不把 HTTP 响应、底层异常或关键判断字段改写成 Code2Skill 自己的业务结论。
+- 不用生成代码或它自己的绿测证明主流程完整或源码语义正确；这两项结论分别交给独立 Review Skill。
 - 不在默认验证中访问真实业务环境。
 - 不声称 Skill 安装等于 MCP 已注册、认证、验证或部署。

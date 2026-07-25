@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = REPO_ROOT / "skills" / "code2skill"
+SKILL_ROOT = REPO_ROOT / "skills" / "code2skill-generate"
 SCRIPTS = SKILL_ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
@@ -309,12 +309,12 @@ def install_write_capability(contract: dict) -> None:
     )
     contract["evidenceCatalog"].extend([
         rebuild_evidence("ev-rebuild-request", "fictional-topic-contract", "README.md#synthetic-rebuild-request", "client-api-call"),
-        rebuild_evidence("ev-rebuild-contract", "fictional-topic-service", "code2skill/SKILL.md#synthetic-rebuild-contract", "transport-contract"),
-        rebuild_evidence("ev-rebuild-side-effect", "fictional-topic-service", "code2skill/SKILL.md#synthetic-rebuild-side-effect", "side-effect"),
-        rebuild_evidence("ev-rebuild-auth", "fictional-topic-service", "code2skill/SKILL.md#synthetic-rebuild-auth", "authorization"),
-        rebuild_evidence("ev-rebuild-validation", "fictional-topic-service", "code2skill/SKILL.md#synthetic-rebuild-validation", "validation"),
-        rebuild_evidence("ev-rebuild-idempotency", "fictional-topic-service", "code2skill/SKILL.md#synthetic-rebuild-idempotency", "idempotency"),
-        rebuild_evidence("ev-rebuild-unknown-outcome", "fictional-topic-service", "code2skill/SKILL.md#synthetic-rebuild-unknown-outcome", "unknown-outcome"),
+        rebuild_evidence("ev-rebuild-contract", "fictional-topic-service", "code2skill-generate/SKILL.md#synthetic-rebuild-contract", "transport-contract"),
+        rebuild_evidence("ev-rebuild-side-effect", "fictional-topic-service", "code2skill-generate/SKILL.md#synthetic-rebuild-side-effect", "side-effect"),
+        rebuild_evidence("ev-rebuild-auth", "fictional-topic-service", "code2skill-generate/SKILL.md#synthetic-rebuild-auth", "authorization"),
+        rebuild_evidence("ev-rebuild-validation", "fictional-topic-service", "code2skill-generate/SKILL.md#synthetic-rebuild-validation", "validation"),
+        rebuild_evidence("ev-rebuild-idempotency", "fictional-topic-service", "code2skill-generate/SKILL.md#synthetic-rebuild-idempotency", "idempotency"),
+        rebuild_evidence("ev-rebuild-unknown-outcome", "fictional-topic-service", "code2skill-generate/SKILL.md#synthetic-rebuild-unknown-outcome", "unknown-outcome"),
     ])
     read_capability = contract["capabilities"][0]
     write_capability = {
@@ -586,11 +586,11 @@ class PipelineTestCase(unittest.TestCase):
         contract_root = self.root / "sources" / "contract-root"
         service_root = self.root / "sources" / "service-root"
         contract_root.mkdir(parents=True, exist_ok=True)
-        (service_root / "code2skill").mkdir(parents=True, exist_ok=True)
+        (service_root / "code2skill-generate").mkdir(parents=True, exist_ok=True)
         (contract_root / "README.md").write_text(
             "# synthetic client contract evidence\n", encoding="utf-8"
         )
-        (service_root / "code2skill" / "SKILL.md").write_text(
+        (service_root / "code2skill-generate" / "SKILL.md").write_text(
             "# synthetic transport contract evidence\n", encoding="utf-8"
         )
         state_dir = self.root / f"{candidate.name}.producer-state"
@@ -790,7 +790,13 @@ class ResumeAndInvalidationTest(PipelineTestCase):
 
         # A pure source change re-runs analyze only; downstream inputs are
         # content-identical, so completed stages stay untouched.
-        evidence = self.root / "sources" / "service-root" / "code2skill" / "SKILL.md"
+        evidence = (
+            self.root
+            / "sources"
+            / "service-root"
+            / "code2skill-generate"
+            / "SKILL.md"
+        )
         evidence.write_text(
             "# synthetic transport contract evidence\nadditional inspected detail\n",
             encoding="utf-8",

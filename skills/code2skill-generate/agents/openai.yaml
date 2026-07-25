@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code2Skill Generate"
+  short_description: "将现有代码生成精简可运行的 Function、MCP 与 Skill"
+  default_prompt: "Use $code2skill-generate on the authorized code scope, identify its independent user goals, and generate the default compact core-export-v1 package with shared Function/MCP capabilities and one Agent Skill per major goal. Run only the package's offline technical validation, keep schemas permissive, and pass backend responses to the Agent without business classification. Do not claim main-flow completeness or source fidelity from generated tests; those are separate checks handled by $code2skill-review-flow and $code2skill-review-source. Do not enable strict audit mode unless I explicitly request it."

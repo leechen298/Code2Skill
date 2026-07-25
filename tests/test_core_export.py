@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = REPO_ROOT / "skills" / "code2skill"
+SKILL_ROOT = REPO_ROOT / "skills" / "code2skill-generate"
 VALIDATOR = SKILL_ROOT / "scripts" / "validate_core_export.py"
 
 
@@ -386,6 +386,17 @@ class CoreExportValidatorTest(unittest.TestCase):
             self.assertNotIn("portable-error-normalizer", core_template)
             self.assertNotIn("UNKNOWN_DISPATCH_OUTCOME", core_template)
             self.assertNotIn("canonical-contract", core_template)
+        for registration_term in (
+            "stdio",
+            "Streamable HTTP",
+            '"command"',
+            '"args"',
+            '"cwd"',
+            '"env"',
+            "绝对路径",
+        ):
+            with self.subTest(registration_term=registration_term):
+                self.assertIn(registration_term, core_setup)
         self.assertLess(
             len(skill.encode("utf-8")),
             20_000,

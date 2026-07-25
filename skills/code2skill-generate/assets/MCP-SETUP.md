@@ -20,6 +20,8 @@ node <absolute-package-path>/mcp-tool/index.mjs
 
 <如果 Runtime Profile 不是 Node/stdio，改为 `export-profile.json` 证明的实际启动方式。>
 
+stdio 与 Streamable HTTP 是 MCP 标准传输。本模板的 `node-stdio` Runtime Profile 使用本地 stdio；只有包已被独立部署为远程服务时，才改用 Consumer Host 的 Streamable HTTP 注册入口。
+
 ## Host 注册参数
 
 将下列中立参数映射到 Consumer Host 支持的 MCP 注册方式：
@@ -35,7 +37,7 @@ node <absolute-package-path>/mcp-tool/index.mjs
 }
 ```
 
-Code2Skill 只提供这些通用运行参数，不生成聊天通道、文件接收/下载或特定平台的私有适配器。
+Code2Skill 只提供这些通用运行参数，不生成聊天通道、文件接收/下载或特定平台的私有适配器。部分 Host 使用 `mcpServers` 包裹这些字段，但那是 Host 配置惯例，不是 MCP 协议要求。
 
 ## 环境变量与认证
 

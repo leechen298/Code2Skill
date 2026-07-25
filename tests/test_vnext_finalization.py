@@ -21,8 +21,20 @@ from tests.test_validate_artifacts import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FINALIZER_PATH = REPO_ROOT / "skills" / "code2skill" / "scripts" / "finalize_export.py"
-DERIVER_PATH = REPO_ROOT / "skills" / "code2skill" / "scripts" / "derive_artifacts.py"
+FINALIZER_PATH = (
+    REPO_ROOT
+    / "skills"
+    / "code2skill-generate"
+    / "scripts"
+    / "finalize_export.py"
+)
+DERIVER_PATH = (
+    REPO_ROOT
+    / "skills"
+    / "code2skill-generate"
+    / "scripts"
+    / "derive_artifacts.py"
+)
 SCRIPTS_PATH = FINALIZER_PATH.parent
 if str(SCRIPTS_PATH) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_PATH))
@@ -350,14 +362,14 @@ def install_complete_readonly_vnext(candidate: Path) -> dict[str, Any]:
             {
                 "evidenceId": response_evidence_id,
                 "sourceId": "fictional-topic-service",
-                "locator": "code2skill/SKILL.md#core-contract",
+                "locator": "code2skill-generate/SKILL.md#core-contract",
                 "semanticRole": "transport-contract",
                 "assertionLevel": "fact",
             },
             {
                 "evidenceId": side_effect_evidence_id,
                 "sourceId": "fictional-topic-service",
-                "locator": "code2skill/SKILL.md#non-negotiable-checks",
+                "locator": "code2skill-generate/SKILL.md#non-negotiable-checks",
                 "semanticRole": "transport-contract",
                 "assertionLevel": "fact",
             },

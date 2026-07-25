@@ -14,7 +14,7 @@ from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = REPO_ROOT / "skills" / "code2skill"
+SKILL_ROOT = REPO_ROOT / "skills" / "code2skill-generate"
 ASSETS = SKILL_ROOT / "assets"
 SCRIPTS = SKILL_ROOT / "scripts"
 DERIVER = SCRIPTS / "derive_artifacts.py"

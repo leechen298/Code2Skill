@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PROBE = REPO_ROOT / "skills" / "code2skill" / "scripts" / "probe_mcp.py"
+PROBE = REPO_ROOT / "skills" / "code2skill-generate" / "scripts" / "probe_mcp.py"
 if str(PROBE.parent) not in sys.path:
     sys.path.insert(0, str(PROBE.parent))
 

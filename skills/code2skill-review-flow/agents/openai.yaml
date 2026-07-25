@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code2Skill Review Flow"
+  short_description: "检查主要目标和代表性主流程是否闭环"
+  default_prompt: "Use $code2skill-review-flow to independently identify the major user goals from the authorized source before trusting the generated Skills. Check one representative standard path per goal and report each as complete, basically usable, blocked, or unverified. Treat only missing goals or required capabilities, broken handoffs, inevitably wrong terminal requests, and incorrect global prerequisites as blockers. Stay offline. Stay read-only unless I explicitly ask you to fix blockers; permission to fix does not authorize live API calls."

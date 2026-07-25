@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code2Skill Review Source"
+  short_description: "检查生成产物是否准确还原源码请求语义"
+  default_prompt: "Use $code2skill-review-source to re-derive the selected goal or capability's request semantics from the authorized source before trusting generated code or tests. Review field provenance, cross-Tool handoffs, deterministic request transformations, goal-specific call chains, and request/auth/attachment imports. Report blocking semantic differences, non-blocking precision gaps, and source boundaries without claiming complete goal coverage. Stay offline. Stay read-only unless I explicitly ask you to fix the package; permission to fix does not authorize live API calls."

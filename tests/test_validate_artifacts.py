@@ -12,7 +12,7 @@ from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = REPO_ROOT / "skills" / "code2skill" / "scripts"
+SCRIPTS = REPO_ROOT / "skills" / "code2skill-generate" / "scripts"
 VALIDATOR = SCRIPTS / "validate_artifacts.py"
 FINALIZER = SCRIPTS / "finalize_export.py"
 DERIVER = SCRIPTS / "derive_artifacts.py"
@@ -330,7 +330,10 @@ def create_base(root: Path, *, write_side_effect: bool = False) -> Path:
         encoding="utf-8",
     )
     (candidate / "portable-error-normalizer.mjs").write_bytes(
-        (REPO_ROOT / "skills/code2skill/assets/portable-error-normalizer.mjs").read_bytes()
+        (
+            REPO_ROOT
+            / "skills/code2skill-generate/assets/portable-error-normalizer.mjs"
+        ).read_bytes()
     )
     (candidate / "mcp-tool").mkdir()
     (candidate / "mcp-tool/runtime.mjs").write_text(
