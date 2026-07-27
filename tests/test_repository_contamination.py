@@ -183,6 +183,9 @@ class RepositoryContaminationTest(unittest.TestCase):
         self.assertIn("只安装 Skill", setup)
         self.assertIn("stdio", setup)
         self.assertIn("Streamable HTTP", setup)
+        self.assertIn("每个独立服务声明必需的基址环境变量", setup)
+        self.assertIn("不默认指向测试、预发或生产环境", setup)
+        self.assertIn("业务 API 基址不作为公共 Tool 参数", setup)
         for topic in ("MCP 启动", "MCP 注册", "认证", "环境变量"):
             self.assertIn(topic, setup)
 

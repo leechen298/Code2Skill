@@ -51,6 +51,9 @@ node <absolute-bundle-path>/mcp-tool/index.mjs
 ## 环境变量与认证
 
 - 只列出源码或 Runtime Profile 能证明的环境变量。
+- 调用业务 API 时，为每个独立服务列出语义明确的必需基址变量，例如 `CODE2SKILL_<FEATURE>_<SERVICE>_BASE_URL`。实际地址由 Consumer Host 显式注入；Function 不默认指向测试、预发或生产环境。
+- 源码中发现的各环境地址只能作为部署参考，不是运行默认值。缺少必需基址时应在网络请求前停止，不得静默回退。
+- 业务 API 基址不作为 Tool 参数交给 Agent；Agent 只提供业务调用参数。
 - 认证、用户和租户身份由运行环境通过环境变量或已有凭证机制注入。
 - 不把 token、Cookie、密钥、会话值或真实凭证写入 Skill、源码、示例命令或本文件。
 - dry-run 变量：`<DRY_RUN_VARIABLE>`，仅在值为 `1` 时生效。
@@ -61,7 +64,7 @@ node <absolute-bundle-path>/mcp-tool/index.mjs
 <DRY_RUN_VARIABLE>=1 npm test
 ```
 
-注册后使用 MCP client 完成 `initialize`、`tools/list` 和安全 mock/dry-run 的代表性 `tools/call`。真实业务接口默认不调用；只有用户明确授权时才执行，写接口不得为了探针自动调用。
+注册后使用 MCP client 完成 `initialize`、`tools/list` 和安全 mock/dry-run 的代表性 `tools/call`。离线测试使用 `.invalid`、本地 mock 或注入的假基址，并验证缺少必需基址时不会发起网络请求。真实业务接口默认不调用；只有用户明确授权时才执行，写接口不得为了探针自动调用。
 
 ## 状态边界
 

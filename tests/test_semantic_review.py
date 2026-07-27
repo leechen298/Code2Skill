@@ -358,6 +358,26 @@ class SplitReviewSkillsTest(unittest.TestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, combined)
+        for endpoint_review_rule in (
+            "业务 API 基址不得成为公共 Tool 参数",
+            "不得默认回退到源码中的测试、预发或生产域名",
+            "公开协议规定的固定 endpoint",
+            "Host 必须提供的业务服务基址",
+            "交给 `code2skill-review-source`",
+        ):
+            with self.subTest(endpoint_review_rule=endpoint_review_rule):
+                self.assertIn(endpoint_review_rule, combined)
+
+        generated_results = read(REPO_ROOT / "docs" / "generated-results.md")
+        for endpoint_contract in (
+            "## 运行地址与环境",
+            "业务 API 基址是部署配置，不是用户业务参数",
+            "Function 不默认指向源码中的测试、预发或生产环境",
+            "Tool 参数只承载业务输入",
+            "离线测试使用 `.invalid`",
+        ):
+            with self.subTest(endpoint_contract=endpoint_contract):
+                self.assertIn(endpoint_contract, generated_results)
 
 
 if __name__ == "__main__":

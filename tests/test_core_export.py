@@ -379,6 +379,9 @@ class CoreExportValidatorTest(unittest.TestCase):
         self.assertIn("部署信任前提", skill)
         self.assertIn("默认不声明 `outputSchema`", skill)
         self.assertIn("由 Consumer Agent 结合用户目标和实际结果决定", skill)
+        self.assertIn("业务 API 基址属于部署配置", skill)
+        self.assertIn("不得把基址公开成 Tool 参数", skill)
+        self.assertIn("不得回退到测试、预发、生产", skill)
         self.assertIn("assets/core-MCP-SETUP.md", skill)
         self.assertIn("assets/core-feature-context.md", skill)
         self.assertNotIn("UNKNOWN_DISPATCH_OUTCOME", skill)
@@ -397,6 +400,16 @@ class CoreExportValidatorTest(unittest.TestCase):
         ):
             with self.subTest(registration_term=registration_term):
                 self.assertIn(registration_term, core_setup)
+        for endpoint_rule in (
+            "每个独立服务",
+            "Consumer Host 显式注入",
+            "不默认指向测试、预发或生产环境",
+            "业务 API 基址不作为 Tool 参数",
+            "缺少必需基址时",
+            "`.invalid`",
+        ):
+            with self.subTest(endpoint_rule=endpoint_rule):
+                self.assertIn(endpoint_rule, core_setup)
         self.assertLess(
             len(skill.encode("utf-8")),
             20_000,

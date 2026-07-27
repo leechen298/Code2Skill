@@ -43,6 +43,8 @@ Code2Skill 只提供这些通用运行参数，不生成聊天通道、文件接
 
 - `<DRY_RUN_VARIABLE>`：仅在值为 `1` 时进入 dry-run，不得产生外部副作用。
 - `<SOURCE_PROVEN_VARIABLE>`：<说明来源、用途、必填性与不得记录的敏感边界。>
+- 调用业务 API 时，为每个独立服务声明必需的基址环境变量。运行地址由部署 Host 显式注入，Function 不默认指向测试、预发或生产环境；缺少基址时在网络请求前停止。
+- 业务 API 基址不作为公共 Tool 参数。源码中发现的环境地址可以作为部署参考，但不能成为运行默认值。
 - 认证与用户/租户身份由部署 Host 或目标应用支持的认证边界注入。不得把 token、cookie、密钥或会话值写入 `SKILL.md`、`references/feature-context.md`、manifest 或示例命令。
 - 每个 MCP Tool handler 的第二个参数是运行时提供的可信 `runtimeContext`。生成回调只能把 `(input, runtimeContext)` 原样交给对应 Function，不能从公开 Tool 参数构造身份、Guard、确认、会话、dispatcher 或 protected state。若部署运行时不能提供 Capability 声明的上下文设施，该能力必须禁用或保持 `requires-host-integration`。
 - 若 `consumer-requirements.json` 声明 `attachment-resolution`，部署必须提供把不透明 Host 授权引用解析为受控内容或流的通用设施；业务上传 Tool 使用该结果，但本包不实现消息接入、附件接收或下载适配器。缺少该设施时，附件相关能力保持 `requires-host-integration`。
