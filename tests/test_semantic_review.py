@@ -180,6 +180,13 @@ class SplitReviewSkillsTest(unittest.TestCase):
                     "不能作为源码证据",
                 ),
                 "field provenance": ("字段来源与跨 Tool 交接",),
+                "selected record handoff": (
+                    "当前选中结果的多个字段或整行对象",
+                ),
+                "selected record merge order": ("合并顺序和显式覆盖关系",),
+                "skill example uses handoff": (
+                    "Skill 的标准示例是否真正使用",
+                ),
                 "same-name fields": ("同名字段",),
                 "deterministic transforms": ("确定性请求转换",),
                 "goal-specific chain": ("每个目标自己的调用链",),
@@ -191,6 +198,54 @@ class SplitReviewSkillsTest(unittest.TestCase):
             skill.index("先从源码重新推导目标能力"),
             skill.index("再与 Function、MCP 和 Skill 比较"),
         )
+
+    def test_generator_preserves_selected_record_handoff_without_overconstraining(
+        self,
+    ) -> None:
+        skill = read(MAIN_SKILL)
+        generated_results = read(REPO_ROOT / "docs" / "generated-results.md")
+
+        assert_concepts(
+            self,
+            skill,
+            {
+                "trace selected result objects": (
+                    "选中结果的多个字段或整行对象",
+                ),
+                "semantic selected object input": (
+                    "业务命名的开放对象",
+                ),
+                "source-order merge": (
+                    "按源码顺序合并且保持显式覆盖关系",
+                ),
+                "no stale prior selection": (
+                    "无前一条记录残值",
+                ),
+                "canonical skill example": (
+                    "Skill 的标准示例必须传递",
+                ),
+                "id-only requires evidence": (
+                    "除非证据证明只传标识符等价",
+                ),
+                "two-record regression": (
+                    "两条不同的匿名记录",
+                ),
+                "backend remains authoritative": (
+                    "省略能否接受仍交给后端判断",
+                ),
+            },
+        )
+        self.assertIn("没有残留前一条记录的值", generated_results)
+
+    def test_flow_review_does_not_overgrade_a_hidden_selected_record_example(
+        self,
+    ) -> None:
+        skill = read(FLOW_SKILL)
+
+        self.assertIn("Function 已支持传入完整选中记录", skill)
+        self.assertIn("不要据此直接判定主流程阻塞", skill)
+        self.assertIn("没有证据证明 ID-only 必然失败", skill)
+        self.assertIn("无法把必需记录交给下游", skill)
 
     def test_source_review_does_not_claim_all_goal_completion(self) -> None:
         skill = read(SOURCE_SKILL)
@@ -346,7 +401,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
                 self.assertIn(concept, installation)
 
     def test_review_instructions_are_generic_not_fixture_specific(self) -> None:
-        combined = "\n".join((read(FLOW_SKILL), read(SOURCE_SKILL)))
+        combined = "\n".join((read(MAIN_SKILL), read(FLOW_SKILL), read(SOURCE_SKILL)))
 
         for forbidden in (
             "HomeKing",
@@ -355,6 +410,8 @@ class SplitReviewSkillsTest(unittest.TestCase):
             "/leave/options",
             "/leave/submit",
             "staff-apply",
+            "employee",
+            "remark",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, combined)
