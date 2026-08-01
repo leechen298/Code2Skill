@@ -16,7 +16,7 @@
 
 这就是我开发 [Code2Skill](https://github.com/leechen298/Code2Skill) 的原因。
 
-目前项目已经发布第一个正式版本：[v1.0.0](https://github.com/leechen298/Code2Skill/releases/tag/v1.0.0)。
+目前项目已经发布正式版本：[v1.0.1](https://github.com/leechen298/Code2Skill/releases/tag/v1.0.1)。
 
 ## 我想解决的并不只是“少点几个页面”
 
@@ -244,6 +244,6 @@ Code2Skill 想做的，就是尽可能降低这个转换过程的成本。
 如果你也在研究企业内部 Agent、MCP 或业务 Skill，欢迎尝试：
 
 - GitHub：[leechen298/Code2Skill](https://github.com/leechen298/Code2Skill)
-- 正式版本：[Code2Skill v1.0.0](https://github.com/leechen298/Code2Skill/releases/tag/v1.0.0)
+- 正式版本：[Code2Skill v1.0.1](https://github.com/leechen298/Code2Skill/releases/tag/v1.0.1)
 
 也欢迎用你熟悉的技术栈和真实场景来测试，并把问题或建议提交到项目中。
