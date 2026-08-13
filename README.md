@@ -2,7 +2,7 @@
 
 Code2Skill 是一组可安装的 Agent Skills。它帮助编程 Agent 从用户授权的前端、后端或全栈代码中理解业务功能，并生成可供其他 Agent 使用的 Function、MCP Tools、业务 Skills 和离线测试。
 
-当前正式版本：[v1.0.1](https://github.com/leechen298/Code2Skill/releases/tag/v1.0.1)。
+当前正式版本：[v1.1.0](https://github.com/leechen298/Code2Skill/releases/tag/v1.1.0)。
 
 ```text
 现有代码
@@ -45,6 +45,12 @@ npx skills add leechen298/Code2Skill \
 - `code2skill-review-source`：深入检查请求字段、转换和调用链是否符合源码。
 
 日常生成只需要 `code2skill-generate`，两个 Review Skill 按需独立使用。旧版本迁移、生成结果的依赖安装和 MCP 注册见[安装说明](docs/installation.md)。
+
+## 使用边界
+
+Code2Skill 生成的是可运行、可继续修改的业务能力初稿，不自动证明所有业务规则或真实环境均已验证。生成模型、源码完整度和授权范围都可能影响结果。
+
+对于复杂写入或高价值业务，建议使用方重点抽检：跨 Tool 数据来源、同名字段语义、确定性请求转换、目标自己的前置步骤、附件上传与下游绑定。需要时再使用 `code2skill-review-flow` 检查主流程，或使用 `code2skill-review-source` 核对关键源码语义；默认离线测试不替代真实接口和部署验收。
 
 ## 快速使用
 

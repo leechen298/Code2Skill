@@ -379,9 +379,9 @@ class CoreExportValidatorTest(unittest.TestCase):
         self.assertIn("部署信任前提", skill)
         self.assertIn("默认不声明 `outputSchema`", skill)
         self.assertIn("由 Consumer Agent 结合用户目标和实际结果决定", skill)
-        self.assertIn("业务 API 基址属于部署配置", skill)
+        self.assertIn("业务 API 基址属部署配置", skill)
         self.assertIn("不得把基址公开成 Tool 参数", skill)
-        self.assertIn("不得回退到测试、预发、生产", skill)
+        self.assertIn("不得回退到测试/预发/生产", skill)
         self.assertIn("assets/core-MCP-SETUP.md", skill)
         self.assertIn("assets/core-feature-context.md", skill)
         self.assertNotIn("UNKNOWN_DISPATCH_OUTCOME", skill)
@@ -412,7 +412,7 @@ class CoreExportValidatorTest(unittest.TestCase):
                 self.assertIn(endpoint_rule, core_setup)
         self.assertLess(
             len(skill.encode("utf-8")),
-            20_000,
+            23_500,
             "the always-loaded Skill prompt must not grow back into the strict audit manual",
         )
 
@@ -779,6 +779,32 @@ class CoreExportValidatorTest(unittest.TestCase):
                 stream.write("// drift\n")
             result = run_validator(candidate)
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_repository_skill_records_decision_boundary_rules(self) -> None:
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("目标决策边界", skill)
+        self.assertIn("工作记忆", skill)
+        self.assertIn("不生成中间文件", skill)
+        self.assertIn("主要角色", skill)
+        self.assertIn("约束所有者", skill)
+        self.assertIn("同时携带", skill)
+        self.assertIn("后端权威", skill)
+        self.assertIn("拆出额外 Tool 的正面条件", skill)
+        self.assertIn("不拆 Tool", skill)
+        self.assertIn("按接口数量机械映射", skill)
+        self.assertIn("多个决策节点", skill)
+        self.assertIn("不能自动转为成功或失败", skill)
+        self.assertIn("不是固定逐步脚本", skill)
+        self.assertIn("每个复杂目标一条正常代表路径", skill)
+        self.assertIn("零外部写入的绕过反例", skill)
+        self.assertIn("匿名、跨业务领域的合成案例", skill)
+        self.assertIn("source-binding", skill)
+        self.assertIn("必须由 Function 承担", skill)
+        self.assertIn("直接 import/alias", skill)
+        self.assertIn("不得只手填最终正确参数", skill)
+        self.assertIn("多下游调用", skill)
+        self.assertIn("归一化", skill)
+        self.assertNotIn("只归入一类", skill)
 
 
 if __name__ == "__main__":

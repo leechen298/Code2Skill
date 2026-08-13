@@ -189,6 +189,11 @@ class SplitReviewSkillsTest(unittest.TestCase):
                 ),
                 "same-name fields": ("同名字段",),
                 "deterministic transforms": ("确定性请求转换",),
+                "per-usage/normalized wire conversion": (
+                    "各使用点",
+                    "归一化",
+                    "不得假设不同调用点",
+                ),
                 "goal-specific chain": ("每个目标自己的调用链",),
                 "key imports": ("有限追踪关键 import",),
                 "attachment binding": ("业务 URL", "后续请求字段"),

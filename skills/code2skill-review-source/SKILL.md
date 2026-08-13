@@ -108,7 +108,7 @@ description: 从用户授权源码重新推导 Code2Skill 生成结果的请求�
 - query 编码、header 组装和 multipart 字段；
 - 条件分支对请求字段的增删。
 
-源码明确的确定性转换应由 Function 稳定还原，不要求 Consumer Agent 每次猜测。公共输入若接收业务值，Function 完成转换；若接收已转换 wire value，Function、MCP 和 Skill 必须一致说明。
+源码明确的确定性转换应由 Function 稳定还原，不要求 Consumer Agent 每次猜测。同一业务值进入多个下游调用时，须按各使用点分别核对确定性转换与最终 wire，不得假设不同调用点表示相同；上游值进入页面前若被确定性别名/值归一化改写，须先核对归一化本身与各下游使用的归一化结果，不得把上游原始表示当下游可用值。公共输入若接收业务值，Function 完成转换；若接收已转换 wire value，Function、MCP 和 Skill 必须一致说明。
 
 #### 每个目标自己的调用链
 
