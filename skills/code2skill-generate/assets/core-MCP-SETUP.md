@@ -1,6 +1,6 @@
 # MCP 安装与运行
 
-> 生成时用实际包路径、Agent ID、环境变量和 dry-run 变量替换占位符；没有对应环境变量时删除示例项。不得在交付文件中保留占位符或真实凭证。
+> 本模板以 `node-stdio` runtime profile 为例。`core-export-v1` 默认包格式的当前实现即 `node-stdio`；当目标技术栈不是 Node/stdio 时，使用对应语言的依赖安装命令与 MCP Server 启动命令，但安装、注册、连通、验证、部署的状态分层保持不变。生成时用实际包路径、Agent ID、环境变量和 dry-run 变量替换占位符；没有对应环境变量时删除示例项。不得在交付文件中保留占位符或真实凭证。
 
 ## 安装 Skill
 
@@ -12,7 +12,7 @@ npx skills add <bundle-path> --skill '*' --agent <agent-id> --global --yes
 
 ## 安装 MCP 依赖
 
-生成包带有 `package-lock.json` 时：
+当前 `node-stdio` profile 示例。生成包带有 `package-lock.json` 时：
 
 ```bash
 cd <absolute-bundle-path>
@@ -23,7 +23,7 @@ npm ci
 
 ## 本地 stdio MCP
 
-默认生成包使用 MCP 标准 stdio 传输，由 Consumer Host 启动本地子进程：
+当前 `node-stdio` profile 示例。默认生成包使用 MCP 标准 stdio 传输，由 Consumer Host 启动本地子进程：
 
 ```bash
 node <absolute-bundle-path>/mcp-tool/index.mjs
@@ -58,7 +58,17 @@ node <absolute-bundle-path>/mcp-tool/index.mjs
 - 不把 token、Cookie、密钥、会话值或真实凭证写入 Skill、源码、示例命令或本文件。
 - dry-run 变量：`<DRY_RUN_VARIABLE>`，仅在值为 `1` 时生效。
 
+## 未满足条件
+
+当目标能力缺少可安全调用的客户端、运行上下文、依赖或安全入口时，本包必须诚实标记为 `requires-host-integration`，不得在 `MCP-SETUP.md`、Skill 或 Function 中用说明文档冒充可运行能力。此时 `MCP-SETUP.md` 应明确列出：
+
+- 缺失的运行时设施（如原应用进程、依赖注入容器、特定语言的 SDK、消息/任务 Broker 连接、附件解析服务等）；
+- 部署方需要补充的接入动作；
+- 该能力当前不可自动运行验证，真实调用前必须由 Consumer Host 或目标系统完成接入。
+
 ## 离线检查
+
+当前 `node-stdio` profile 示例：
 
 ```bash
 <DRY_RUN_VARIABLE>=1 npm test

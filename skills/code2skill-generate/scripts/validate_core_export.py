@@ -270,8 +270,9 @@ def run_mcp_protocol_probe(candidate: Path, errors: list[str]) -> None:
                 )
 
 
-def validate(candidate: Path, *, run_tests: bool = True) -> list[str]:
+def validate(candidate: Path, *, run_tests: bool = True) -> tuple[list[str], bool]:
     errors: list[str] = []
+    requires_host_integration = False
     for relative in REQUIRED_FILES:
         if not (candidate / relative).is_file():
             errors.append(f"{relative}: required core-export-v1 file is missing")
@@ -339,7 +340,11 @@ def validate(candidate: Path, *, run_tests: bool = True) -> list[str]:
     if package.get("type") != "module":
         errors.append("package.json: type must equal module")
     metadata = package.get("code2skill")
-    profile = metadata.get("profile") if isinstance(metadata, dict) else None
+    if isinstance(metadata, dict):
+        profile = metadata.get("profile")
+        requires_host_integration = bool(metadata.get("requiresHostIntegration"))
+    else:
+        profile = None
     if profile != CORE_PROFILE:
         errors.append(f"package.json: code2skill.profile must equal {CORE_PROFILE}")
     dependencies = package.get("dependencies")
@@ -390,7 +395,7 @@ def validate(candidate: Path, *, run_tests: bool = True) -> list[str]:
             errors,
             environment=clean_test_environment(),
         )
-    return errors
+    return errors, requires_host_integration
 
 
 def parse_args() -> argparse.Namespace:
@@ -410,7 +415,7 @@ def main() -> int:
     if not candidate.is_dir():
         print(f"ERROR: candidate directory does not exist: {candidate}", file=sys.stderr)
         return 1
-    errors = validate(candidate, run_tests=not args.skip_tests)
+    errors, requires_host_integration = validate(candidate, run_tests=not args.skip_tests)
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
@@ -420,11 +425,17 @@ def main() -> int:
         for path in candidate.rglob("*")
         if path.is_file() and "node_modules" not in path.relative_to(candidate).parts
     )
-    summary = (
-        "Code2Skill core structure, MCP discovery, and package tests passed"
-        if not args.skip_tests
-        else "Code2Skill core structure is valid; package tests were skipped"
-    )
+    if requires_host_integration:
+        summary = (
+            "Code2Skill core structure and MCP discovery are valid; "
+            f"runtime verification is incomplete: requires-host-integration: {file_count} files"
+        )
+    elif args.skip_tests:
+        summary = "Code2Skill core structure is valid; package tests were skipped"
+    else:
+        summary = (
+            "Code2Skill core structure, MCP discovery, and package tests passed"
+        )
     print(f"{summary}: {file_count} files")
     return 0
 
