@@ -2,7 +2,7 @@
 
 Code2Skill 是一组可安装的 Agent Skills。它帮助编程 Agent 从用户授权的前端、后端或全栈代码中理解业务功能，并生成可供其他 Agent 使用的 Function、MCP Tools、业务 Skills 和离线测试。
 
-当前正式版本：[v1.1.0](https://github.com/leechen298/Code2Skill/releases/tag/v1.1.0)。
+当前正式版本：[v1.1.1](https://github.com/leechen298/Code2Skill/releases/tag/v1.1.1)。
 
 ```text
 现有代码
@@ -45,6 +45,16 @@ npx skills add leechen298/Code2Skill \
 - `code2skill-review-source`：深入检查请求字段、转换和调用链是否符合源码。
 
 日常生成只需要 `code2skill-generate`，两个 Review Skill 按需独立使用。旧版本迁移、生成结果的依赖安装和 MCP 注册见[安装说明](docs/installation.md)。
+
+### DeepSeek Harness
+
+DeepSeek Harness 用户可以把三个 Skill 作为 Bundle 安装到指定 profile：
+
+```bash
+dsh plugin --profile web add github:leechen298/Code2Skill#v1.1.1
+```
+
+安装、验证、headless profile 和卸载说明见 [DeepSeek Harness 集成文档](docs/deepseek-harness.md)。生成后的业务 MCP 仍按各产物的 `MCP-SETUP.md` 单独注册。
 
 ## 使用边界
 

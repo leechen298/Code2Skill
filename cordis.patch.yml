@@ -1,0 +1,8 @@
+- insert:
+    - id: code2skill-bundled-skills
+      name: '@deepseek-ai/dsh-skill-filesystem'
+      config:
+        providerName: code2skill-bundle
+        includeDefaultRoots: false
+        watch: false
+        bundledSkillDir: !!js "process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(new URL('package.json', baseUrl)).resolve('@leechen298/code2skill/package.json')), 'skills')"

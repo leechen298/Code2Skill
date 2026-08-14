@@ -9,13 +9,15 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILL_ROOT = REPO_ROOT / "skills" / "code2skill-generate"
 TEXT_SUFFIXES = {".json", ".md", ".mjs", ".py", ".yaml", ".yml", ".txt"}
+TRANSIENT_COMPONENTS = {".git", ".pytest_cache", "__pycache__"}
 
 
 def repository_files() -> list[Path]:
     return sorted(
         path
         for path in REPO_ROOT.rglob("*")
-        if path.is_file() and ".git" not in path.relative_to(REPO_ROOT).parts
+        if path.is_file()
+        and TRANSIENT_COMPONENTS.isdisjoint(path.relative_to(REPO_ROOT).parts)
     )
 
 
@@ -41,14 +43,17 @@ class RepositoryContaminationTest(unittest.TestCase):
             ".gitignore",
             "LICENSE",
             "README.md",
+            "cordis.patch.yml",
             "docs",
+            "package.json",
             "skills",
             "tests",
         }
         unexpected = sorted(
             path.name
             for path in REPO_ROOT.iterdir()
-            if path.name != ".git" and path.name not in allowed_top_level
+            if path.name not in TRANSIENT_COMPONENTS
+            and path.name not in allowed_top_level
         )
         self.assertEqual(unexpected, [])
 

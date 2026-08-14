@@ -1,0 +1,33 @@
+{
+  "name": "@leechen298/code2skill",
+  "version": "1.1.1",
+  "description": "Generate and review portable Function, MCP, and Agent Skill packages from existing code.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leechen298/Code2Skill.git"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "skills"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./skills/*": "./skills/*"
+  },
+  "keywords": [
+    "agent-skills",
+    "code2skill",
+    "deepseek-harness",
+    "dsh-plugin",
+    "mcp"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
