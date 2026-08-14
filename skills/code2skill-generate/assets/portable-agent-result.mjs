@@ -1,3 +1,9 @@
+// Node stdio profile result projector. Provides jsonSafe projection and
+// toAgentResult / toAgentError for all core-export-v1 node-stdio packages.
+// Only readHttpResponse / httpResultFromError are HTTP-specific; copy the whole
+// file into every node-stdio package, and use the HTTP helpers only when the
+// underlying transport is HTTP.
+
 function jsonSafe(value, seen = new Set()) {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number") return Number.isFinite(value) ? value : String(value);

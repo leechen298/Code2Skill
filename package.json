@@ -1,6 +1,6 @@
 {
   "name": "@leechen298/code2skill",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Generate and review portable Function, MCP, and Agent Skill packages from existing code.",
   "license": "MIT",
   "repository": {

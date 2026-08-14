@@ -2,7 +2,7 @@
 
 Code2Skill 是一组可安装的 Agent Skills。它帮助编程 Agent 从用户授权的前端、后端或全栈代码中理解业务功能，并生成可供其他 Agent 使用的 Function、MCP Tools、业务 Skills 和离线测试。
 
-当前正式版本：[v1.1.1](https://github.com/leechen298/Code2Skill/releases/tag/v1.1.1)。
+当前正式版本：[v1.1.2](https://github.com/leechen298/Code2Skill/releases/tag/v1.1.2)。
 
 ```text
 现有代码
@@ -16,7 +16,7 @@ Function 和 MCP 提供业务能力，Skill 负责引导 Agent 使用这些能�
 
 ## 它会做什么
 
-- 以前端实际调用的后端接口为主要能力来源，按需读取后端公开请求和响应结构。
+- 从源码中真实存在的业务调用入口生成能力：客户端功能以客户端/Consumer 实际触发的调用为主；没有客户端时，从用户指定的公开 API、RPC、Service、消息或任务入口开始，按需读取公开请求/响应/契约结构。
 - 从用户指定的页面、目录或功能中识别可以独立完成的主要目标。
 - 将字段来源、选中结果的跨 Tool 交接、请求组装和确定性的格式转换写入 Function。
 - 为主要目标分别生成 Skill，并复用必要的 Function 和 MCP Tool。
@@ -51,7 +51,7 @@ npx skills add leechen298/Code2Skill \
 DeepSeek Harness 用户可以把三个 Skill 作为 Bundle 安装到指定 profile：
 
 ```bash
-dsh plugin --profile web add github:leechen298/Code2Skill#v1.1.1
+dsh plugin --profile web add github:leechen298/Code2Skill#v1.1.2
 ```
 
 安装、验证、headless profile 和卸载说明见 [DeepSeek Harness 集成文档](docs/deepseek-harness.md)。生成后的业务 MCP 仍按各产物的 `MCP-SETUP.md` 单独注册。
@@ -67,9 +67,9 @@ Code2Skill 生成的是可运行、可继续修改的业务能力初稿，不自
 在目标代码仓库中调用，并明确允许搜索的源码范围：
 
 ```text
-使用 $code2skill-generate，把 <页面、目录或功能路径> 生成为可运行的 Function、MCP 和 Skills。
-允许搜索的源码根目录：<前端目录>、<后端目录>、<协议目录>。
-以前端实际调用的接口为主要能力来源，不调用真实业务接口。
+使用 $code2skill-generate，把 <页面、目录、功能路径或公开入口> 生成为可运行的 Function、MCP 和 Skills。
+允许搜索的源码根目录：<前端目录>、<后端目录>、<协议目录>、<Service/消息/任务目录>。
+以源码中真实存在的业务调用入口为主要能力来源，不调用真实业务接口。
 ```
 
 需要复核时：
@@ -82,19 +82,21 @@ Code2Skill 生成的是可运行、可继续修改的业务能力初稿，不自
 
 ## 生成结果
 
+默认产物的逻辑组成保持不变，具体扩展名、依赖清单和启动方式跟随目标技术栈的 runtime profile。当前 `core-export-v1` 默认格式由 `node-stdio` profile 实现：
+
 ```text
 generated/code2skill/<feature-id>/
 ├── SKILL.md 或 skills/*/SKILL.md
-├── function-core/index.mjs
-├── mcp-tool/index.mjs
-├── portable-agent-result.mjs
+├── function-core/index.mjs      # node-stdio profile 示例
+├── mcp-tool/index.mjs           # node-stdio profile 示例
+├── portable-agent-result.mjs    # HTTP 场景辅助库
 ├── tests/
 ├── package.json
 ├── MCP-SETUP.md
 └── references/feature-context.md  # 复杂业务才生成
 ```
 
-每个生成目录的 `MCP-SETUP.md` 会说明依赖安装、启动方式、环境变量和 MCP 注册方法。Skill 已安装、MCP 已连接和真实业务已验证是三个独立状态。
+每个生成目录的 `MCP-SETUP.md` 会说明实际运行语言、依赖安装、启动方式、环境变量、未满足条件和 MCP 注册方法。Skill 已安装、MCP 已连接和真实业务已验证是三个独立状态。
 
 ## 生成效果参考
 
@@ -112,6 +114,7 @@ generated/code2skill/<feature-id>/
 
 - [安装 Skill、生成结果依赖与注册 MCP](docs/installation.md)
 - [生成结果的结构和设计原则](docs/generated-results.md)
+- [调用方式与语言中立化迭代设计](docs/development/runtime-neutral-generation-v1.zh-CN.md)
 - [可选的高级验证流程](docs/advanced-validation.md)
 - [生成模型、评分方法与匿名评估结果](docs/evaluation.md)
 - [完整文档索引](docs/README.md)
