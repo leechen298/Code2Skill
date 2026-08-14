@@ -7,13 +7,13 @@ Code2Skill 同时以 DeepSeek Harness Bundle 的形式发布。Bundle 只把仓�
 先安装 DeepSeek Harness 和 `pnpm`，然后把固定版本安装到需要使用的 profile：
 
 ```bash
-dsh plugin --profile web add github:leechen298/Code2Skill#v1.1.2
+dsh plugin --profile web add github:leechen298/Code2Skill#v1.1.3
 ```
 
 如果使用一次性 headless profile，需要单独安装：
 
 ```bash
-dsh plugin --profile headless add github:leechen298/Code2Skill#v1.1.2
+dsh plugin --profile headless add github:leechen298/Code2Skill#v1.1.3
 ```
 
 每个 profile 管理自己的依赖，因此安装到 `web` 不会自动安装到 `headless`。
