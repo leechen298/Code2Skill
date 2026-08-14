@@ -283,14 +283,19 @@ class SplitReviewSkillsTest(unittest.TestCase):
 
     def test_readme_documents_short_review_names_and_independent_use(self) -> None:
         readme = read(REPO_ROOT / "README.md")
+        readme_zh = read(REPO_ROOT / "README.zh-CN.md")
 
-        self.assertIn(
-            "--skill code2skill-generate code2skill-review-flow code2skill-review-source",
-            readme,
-        )
-        self.assertIn("`code2skill-review-flow`：检查用户能否通过主要流程", readme)
-        self.assertIn("`code2skill-review-source`：深入检查请求字段", readme)
-        self.assertIn("两个 Review Skill 按需独立使用", readme)
+        for document in (readme, readme_zh):
+            self.assertIn(
+                "--skill code2skill-generate code2skill-review-flow code2skill-review-source",
+                document,
+            )
+        self.assertIn("`code2skill-review-flow`: checks whether a user", readme)
+        self.assertIn("`code2skill-review-source`: reviews request fields", readme)
+        self.assertIn("Run the two review Skills independently", readme)
+        self.assertIn("`code2skill-review-flow`：检查用户能否通过主要流程", readme_zh)
+        self.assertIn("`code2skill-review-source`：深入检查请求字段", readme_zh)
+        self.assertIn("两个 Review Skill 按需独立使用", readme_zh)
         installation = read(REPO_ROOT / "docs" / "installation.md")
         self.assertIn("从 `code2skill` 更名为 `code2skill-generate`", installation)
         self.assertIn(
@@ -304,6 +309,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
         self.assertTrue(ANON_EVALUATION.is_file())
         report = read(ANON_EVALUATION)
         readme = read(REPO_ROOT / "README.md")
+        readme_zh = read(REPO_ROOT / "README.zh-CN.md")
 
         self.assertIn("# Code2Skill 生成结果评估", report)
         self.assertIn("不能用于还原原始业务", report)
@@ -322,12 +328,19 @@ class SplitReviewSkillsTest(unittest.TestCase):
             with self.subTest(score=expected):
                 self.assertIn(expected, report)
         for expected in (
+            "| GPT-5.6 Sol (Ultra) | 2026-07-24 | 47m 45s | **9.4** |",
+            "| Kimi K3 (Max reasoning) | 2026-07-24 | about 93m | **8.9** |",
+            "| GPT-5.6 Sol (High) | 2026-07-24 | 20m 29s | **8.4** |",
+        ):
+            with self.subTest(readme_summary=expected):
+                self.assertIn(expected, readme)
+        for expected in (
             "| GPT-5.6 Sol（Ultra 模式） | 2026-07-24 | 47 分 45 秒 | **9.4** |",
             "| Kimi K3（Max 推理档位） | 2026-07-24 | 约 93 分钟 | **8.9** |",
             "| GPT-5.6 Sol（High 推理档位） | 2026-07-24 | 20 分 29 秒 | **8.4** |",
         ):
-            with self.subTest(readme_summary=expected):
-                self.assertIn(expected, readme)
+            with self.subTest(readme_zh_summary=expected):
+                self.assertIn(expected, readme_zh)
         self.assertIn("## 生成耗时口径", report)
         self.assertIn("不用于推断模型的一般速度", report)
         for marker in (
@@ -360,6 +373,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
 
     def test_readme_is_a_short_entrypoint_and_links_detailed_docs(self) -> None:
         readme = read(REPO_ROOT / "README.md")
+        readme_zh = read(REPO_ROOT / "README.zh-CN.md")
         expected_docs = {
             "installation": REPO_ROOT / "docs" / "installation.md",
             "generated results": REPO_ROOT / "docs" / "generated-results.md",
@@ -372,17 +386,24 @@ class SplitReviewSkillsTest(unittest.TestCase):
             130,
             "README should remain a concise project entrypoint",
         )
+        self.assertLessEqual(
+            len(readme_zh.splitlines()),
+            130,
+            "Chinese README should remain a concise project entrypoint",
+        )
         for concept in (
-            "## 可以用哪些 Agent",
-            "Codex、Claude Code、Kimi Code",
+            "## Supported Agents",
+            "Codex, Claude Code, and Kimi Code",
             "Claude Code",
             "Cursor",
             "OpenClaw",
-            "更多环境见",
-            "还需按照生成结果中的 `MCP-SETUP.md` 注册 MCP",
+            "compatibility list",
+            "register the generated MCP server",
         ):
             with self.subTest(agent_compatibility=concept):
                 self.assertIn(concept, readme)
+        self.assertIn("[简体中文](README.zh-CN.md)", readme)
+        self.assertIn("[English](README.md)", readme_zh)
         for label, path in expected_docs.items():
             with self.subTest(document=label):
                 self.assertTrue(path.is_file())

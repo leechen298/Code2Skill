@@ -43,6 +43,7 @@ class RepositoryContaminationTest(unittest.TestCase):
             ".gitignore",
             "LICENSE",
             "README.md",
+            "README.zh-CN.md",
             "cordis.patch.yml",
             "docs",
             "package.json",
