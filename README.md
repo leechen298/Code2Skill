@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 Code2Skill is a collection of installable Agent Skills that helps coding agents understand business functionality in user-authorized frontend, backend, or full-stack source code, then generate Functions, MCP tools, workflow Skills, and offline tests for other agents to use.
 
-Current release: [v1.1.2](https://github.com/leechen298/Code2Skill/releases/tag/v1.1.2).
+Current release: [v1.1.3](https://github.com/leechen298/Code2Skill/releases/tag/v1.1.3).
 
 ```text
 Existing application code
@@ -53,7 +53,7 @@ Routine generation only requires `code2skill-generate`. Run the two review Skill
 DeepSeek Harness users can install the three Skills as a Bundle in a selected profile:
 
 ```bash
-dsh plugin --profile web add github:leechen298/Code2Skill#v1.1.2
+dsh plugin --profile web add github:leechen298/Code2Skill#v1.1.3
 ```
 
 See the [DeepSeek Harness integration guide](docs/deepseek-harness.md) for installation, verification, headless profiles, and removal. Generated business MCP servers must still be registered separately according to their own `MCP-SETUP.md` files.
