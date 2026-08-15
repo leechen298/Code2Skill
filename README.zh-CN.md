@@ -1,5 +1,7 @@
 # Code2Skill
 
+![Code2Skill：把现有代码变成 Agent 能力](docs/assets/code2skill-social-preview.png)
+
 [English](README.md) | 简体中文
 
 Code2Skill 是一组可安装的 Agent Skills。它帮助编程 Agent 从用户授权的前端、后端或全栈代码中理解业务功能，并生成可供其他 Agent 使用的 Function、MCP Tools、业务 Skills 和离线测试。
