@@ -1,5 +1,7 @@
 # Code2Skill
 
+![Code2Skill — turn existing code into agent capabilities](docs/assets/code2skill-social-preview.png)
+
 English | [简体中文](README.zh-CN.md)
 
 Code2Skill is a collection of installable Agent Skills that helps coding agents understand business functionality in user-authorized frontend, backend, or full-stack source code, then generate Functions, MCP tools, workflow Skills, and offline tests for other agents to use.
