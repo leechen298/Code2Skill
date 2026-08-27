@@ -144,8 +144,8 @@ Producer 根据目标仓库的现有实现选择以下一种方式，不在 Code
 - `skills/code2skill-generate/SKILL.md`
 - `skills/code2skill-review-flow/SKILL.md`
 - `skills/code2skill-review-source/SKILL.md`
-- `skills/code2skill-generate/assets/core-feature-context.md`
-- `skills/code2skill-generate/assets/core-MCP-SETUP.md`
+- `skills/code2skill-generate/assets/core-feature-context.zh-CN.md`
+- `skills/code2skill-generate/assets/core-MCP-SETUP.zh-CN.md`
 - `skills/code2skill-generate/scripts/validate_core_export.py`（仅必要的 profile/语言中立调整）
 - `README.md`
 - `docs/generated-results.md`

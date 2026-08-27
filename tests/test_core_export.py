@@ -364,28 +364,44 @@ def run_validator(
 class CoreExportValidatorTest(unittest.TestCase):
     def test_repository_skill_defaults_to_core_without_reloading_strict_audit(self) -> None:
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        skill_zh = (
+            SKILL_ROOT / "references" / "SKILL.zh-CN.md"
+        ).read_text(encoding="utf-8")
         core_setup = (SKILL_ROOT / "assets" / "core-MCP-SETUP.md").read_text(
             encoding="utf-8"
         )
         core_context = (
             SKILL_ROOT / "assets" / "core-feature-context.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("默认生成结果", skill)
-        self.assertIn("`strict-export-v1` 格式保留兼容，但不再默认执行", skill)
-        self.assertIn("不要在默认包中生成 Canonical/Goal Contract", skill)
-        self.assertIn("不要仅凭字段名判断语义", skill)
-        self.assertIn("每个 Skill 只服务一个主要用户目标", skill)
-        self.assertIn("不得写成该 Skill 的前置步骤", skill)
-        self.assertIn("部署信任前提", skill)
-        self.assertIn("默认不声明 `outputSchema`", skill)
-        self.assertIn("由 Consumer Agent 结合用户目标和实际结果决定", skill)
-        self.assertIn("业务 API 基址属部署配置", skill)
-        self.assertIn("不得把基址公开成 Tool 参数", skill)
-        self.assertIn("不得回退到测试/预发/生产", skill)
+        core_setup_zh = (
+            SKILL_ROOT / "assets" / "core-MCP-SETUP.zh-CN.md"
+        ).read_text(encoding="utf-8")
+        core_context_zh = (
+            SKILL_ROOT / "assets" / "core-feature-context.zh-CN.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("默认生成结果", skill_zh)
+        self.assertIn("`strict-export-v1` 格式保留兼容，但不再默认执行", skill_zh)
+        self.assertIn("不要在默认包中生成 Canonical/Goal Contract", skill_zh)
+        self.assertIn("不要仅凭字段名判断语义", skill_zh)
+        self.assertIn("每个 Skill 只服务一个主要用户目标", skill_zh)
+        self.assertIn("不得写成该 Skill 的前置步骤", skill_zh)
+        self.assertIn("部署信任前提", skill_zh)
+        self.assertIn("默认不声明 `outputSchema`", skill_zh)
+        self.assertIn("由 Consumer Agent 结合用户目标和实际结果决定", skill_zh)
+        self.assertIn("业务 API 基址属部署配置", skill_zh)
+        self.assertIn("不得把基址公开成 Tool 参数", skill_zh)
+        self.assertIn("不得回退到测试/预发/生产", skill_zh)
         self.assertIn("assets/core-MCP-SETUP.md", skill)
         self.assertIn("assets/core-feature-context.md", skill)
-        self.assertNotIn("UNKNOWN_DISPATCH_OUTCOME", skill)
-        for core_template in (core_setup, core_context):
+        self.assertIn("assets/core-MCP-SETUP.zh-CN.md", skill_zh)
+        self.assertIn("assets/core-feature-context.zh-CN.md", skill_zh)
+        self.assertNotIn("UNKNOWN_DISPATCH_OUTCOME", skill_zh)
+        for core_template in (
+            core_setup,
+            core_context,
+            core_setup_zh,
+            core_context_zh,
+        ):
             self.assertNotIn("portable-error-normalizer", core_template)
             self.assertNotIn("UNKNOWN_DISPATCH_OUTCOME", core_template)
             self.assertNotIn("canonical-contract", core_template)
@@ -396,11 +412,21 @@ class CoreExportValidatorTest(unittest.TestCase):
             '"args"',
             '"cwd"',
             '"env"',
-            "绝对路径",
+            "absolute paths",
         ):
             with self.subTest(registration_term=registration_term):
                 self.assertIn(registration_term, core_setup)
         for endpoint_rule in (
+            "every independent service",
+            "Consumer Host explicitly injects",
+            "must not default to test, staging, or production",
+            "Do not expose the business API base URL",
+            "required base URL is missing",
+            "`.invalid`",
+        ):
+            with self.subTest(endpoint_rule=endpoint_rule):
+                self.assertIn(endpoint_rule, core_setup)
+        for chinese_rule in (
             "每个独立服务",
             "Consumer Host 显式注入",
             "不默认指向测试、预发或生产环境",
@@ -408,12 +434,17 @@ class CoreExportValidatorTest(unittest.TestCase):
             "缺少必需基址时",
             "`.invalid`",
         ):
-            with self.subTest(endpoint_rule=endpoint_rule):
-                self.assertIn(endpoint_rule, core_setup)
+            with self.subTest(chinese_rule=chinese_rule):
+                self.assertIn(chinese_rule, core_setup_zh)
         self.assertLess(
             len(skill.encode("utf-8")),
+            31_500,
+            "the English Skill prompt must not grow back into the strict audit manual",
+        )
+        self.assertLess(
+            len(skill_zh.encode("utf-8")),
             23_500,
-            "the always-loaded Skill prompt must not grow back into the strict audit manual",
+            "the Chinese Skill prompt must not grow back into the strict audit manual",
         )
 
     def test_accepts_small_runnable_delivery_without_audit_files(self) -> None:
@@ -781,7 +812,9 @@ class CoreExportValidatorTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_repository_skill_records_decision_boundary_rules(self) -> None:
-        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        skill = (
+            SKILL_ROOT / "references" / "SKILL.zh-CN.md"
+        ).read_text(encoding="utf-8")
         self.assertIn("目标决策边界", skill)
         self.assertIn("工作记忆", skill)
         self.assertIn("不生成中间文件", skill)

@@ -1,27 +1,27 @@
-# 功能背景
+# Feature Context
 
-仅在背景知识不适合直接放进 `SKILL.md` 时使用本文件。
+Use this file only when the background knowledge is not suitable for inclusion directly in `SKILL.md`.
 
-## 用户目标
+## User Goal
 
-- 这个 Skill 帮助用户完成什么目标。
-- 哪些相邻目标不属于本 Skill。
+- What goal this Skill helps the user complete.
+- Which adjacent goals are outside this Skill's scope.
 
-## 已知业务信息
+## Known Business Information
 
-- 用户完成目标的主要步骤、分支与停止条件。
-- 已知参数的来源、用途及其对应调用位置（HTTP 接口、RPC service/method、消息 destination、任务入口或应用内 Service 等）。
-- 对 Agent 判断下一步有帮助的响应字段、回执或任务 ID。
-- 源码能够证明的附件、认证、运行上下文和接入条件。
+- The primary steps, branches, and stopping conditions for completing the goal.
+- The provenance and purpose of known parameters and their corresponding invocation locations, such as an HTTP interface, RPC service/method, message destination, task entry point, or in-process Service.
+- Response fields, receipts, or task IDs that help the agent decide the next step.
+- Attachment, authentication, runtime-context, and integration prerequisites proven by source code.
 
-## 可用能力
+## Available Capabilities
 
-- 每个 Function/MCP Tool 的用途与适用调用语义（同步请求-响应、同步方法调用、应用内 Service、异步提交等）。
-- 当前目标中何时可能调用、跳过或组合这些能力。
+- The purpose and applicable invocation semantics of each Function/MCP tool, such as synchronous request-response, synchronous method invocation, in-process Service, or asynchronous submission.
+- When these capabilities may be called, skipped, or composed for the current goal.
 
-## 尚不确定
+## Remaining Unknowns
 
-- 搜索范围内没有直接证据的内容。
-- 需要 Consumer Agent 根据实际响应、后端反馈或用户补充继续判断的内容。
+- Information for which there is no direct evidence in the search scope.
+- Information that requires the Consumer Agent to continue reasoning from the actual response, backend feedback, or additional user input.
 
-多个 Skill 共用 Function/MCP 时，每个 Skill 在自己的目录内保存与本目标有关的背景，不通过跨目录相对路径依赖另一个 Skill。
+When multiple Skills share Functions and MCP tools, each Skill keeps the context relevant to its own goal within its own directory. Do not make one Skill depend on another through cross-directory relative paths.

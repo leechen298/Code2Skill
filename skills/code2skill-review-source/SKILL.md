@@ -1,186 +1,188 @@
 ---
 name: code2skill-review-source
-description: 从用户授权源码重新推导 Code2Skill 生成结果的请求语义，检查字段来源、跨 Tool 交接、确定性转换、目标调用链及请求、认证和附件依赖是否准确还原。
+description: Review Code2Skill request semantics against authorized source code, including source binding, cross-Tool handoffs, deterministic transformations, invocation chains, authentication, and attachments. 从授权源码独立复核 Code2Skill 请求语义。
 ---
 
 # Code2Skill Source Review
 
-审核已有 Code2Skill 生成结果与授权源码的请求语义是否一致。它回答“生成结果与源码有多一致”，不负责重新盘点完整主要目标，也不以生成结果自己的测试通过作为正确证据。
+Review whether the request semantics in an existing Code2Skill-generated result match the authorized source code. This Skill answers "how closely does the generated result match the source code?" It does not re-inventory all major goals, and it does not treat the generated result's own passing tests as evidence of correctness.
 
-若需要先判断主要目标是否齐全、标准路径能否完成，使用 `code2skill-review-flow`。两个 Review 可以分别运行，互不依赖。
+The complete Chinese version is available at [references/SKILL.zh-CN.md](references/SKILL.zh-CN.md). Follow the user's language for final replies, review conclusions, and all user-facing content.
 
-本 Skill 默认只读、离线、源码优先；它不是第二套重型审计流程，只返回简洁、可修复的结论，不生成 Canonical Contract、证据矩阵、审核报告或其他交付文件。
+If you first need to determine whether the major goals are complete and whether the standard paths can be completed, use `code2skill-review-flow`. The two Reviews can run separately and do not depend on each other.
 
-## 输入与边界
+This Skill is read-only, offline, and source-first by default. It is not a second heavyweight audit process. It returns only concise, actionable findings and does not generate a Canonical Contract, evidence matrix, review report, or other deliverable files.
 
-开始前确定：
+## Inputs and boundaries
 
-- 待审核生成包路径；
-- 用户明确授权的源码根；
-- 待审核的 Skill、主要目标、Tool 或能力范围；
-- 用户是否同时授权修复；未明确授权时保持只读。
+Before starting, identify:
 
-只审核 `code2skill-generate` 的默认生成结果。遇到高级验证格式、旧版或无法识别的目录时，说明不适用，不要套用本流程。
+- the path to the generated package under review;
+- the source roots explicitly authorized by the user;
+- the Skill, major goal, Tool, or capability scope under review;
+- whether the user has also authorized fixes; remain read-only unless this authorization is explicit.
 
-只搜索授权源码根。存在客户端或 Consumer 时，以客户端/Consumer 实际触发的业务调用和最终调用构造为主；没有客户端时，从用户指定的公开 API、RPC、Service、消息或任务入口开始。必要时核对公开 Request/Response、service/method、消息 destination/key、任务 payload、认证头或上传接口，但不深入后端 Service、数据库、消息下游、审批或完整业务校验。
+Review only the default output of `code2skill-generate`. If you encounter an advanced-validation format, a legacy version, or an unrecognized directory, explain that this process does not apply rather than forcing it onto the artifact.
 
-默认禁止：
+Search only the authorized source roots. When a client or Consumer exists, focus on the business invocation it actually triggers and the final invocation construction. When no client exists, begin from the public API, RPC, Service, message, or task entry point specified by the user. When necessary, verify public Request/Response definitions, service/method identity, message destination/key, task payload, authentication headers, or upload interfaces, but do not descend into backend Services, databases, downstream message processing, approvals, or complete business validation.
 
-- 调用真实业务接口或写接口；
-- 为了审核安装、注册或部署 MCP；
-- 扫描整台机器寻找未授权依赖或后端仓库；
-- 修改生成包、源码或测试；
-- 把临时推导写成审核文档并留在仓库。
+By default, do not:
 
-用户明确授权修复时，可以修正生成包并补针对性离线测试；修复授权不等于真实接口调用授权。
+- call real business interfaces or write interfaces;
+- install, register, or deploy MCP for the purpose of review;
+- scan the entire machine for unauthorized dependencies or backend repositories;
+- modify the generated package, source code, or tests;
+- write temporary deductions into review documents that remain in the repository.
 
-## 保持复核独立
+When the user explicitly authorizes fixes, you may correct the generated package and add targeted offline tests. Authorization to fix does not authorize calls to real interfaces.
 
-优先让没有参与生成的 Agent 或新会话执行。只向 Reviewer 提供源码范围、生成包路径和待审核目标，不把 Producer 的字段解释、生成结论或测试预期当成事实。
+## Keep the review independent
 
-只有同一个 Agent 可用时，执行冷复核：
+Prefer an Agent that did not participate in generation, or a new session. Give the Reviewer only the source scope, generated-package path, and review targets. Do not present the Producer's field explanations, generation conclusions, or test expectations as facts.
 
-1. 把当前 Function、Skill 文案和测试断言视为未验证假设；
-2. 先从源码重新推导目标能力的字段来源、转换和终端业务调用；
-3. 在工作记忆中形成临时对照，不写入仓库；
-4. 再与 Function、MCP 和 Skill 比较；
-5. 最后才阅读或运行生成包测试。
+When only the same Agent is available, perform a cold review:
 
-不得从 Function 当前实现反推源码预期。README、Feature Context、Tool 描述、mock 返回和绿色测试都是待核对对象，不能作为源码证据。
+1. Treat the current Function, Skill text, and test assertions as unverified hypotheses.
+2. Re-derive the target capability's field sources, transformations, and terminal business invocation from source code first.
+3. Form a temporary comparison in working memory; do not write it into the repository.
+4. Then compare it with the Function, MCP, and Skill.
+5. Only then read or run the generated package's tests.
 
-## 审核流程
+Do not infer the expected source behavior from the current Function implementation. The README, Feature Context, Tool descriptions, mock returns, and green tests are all objects to verify; they are not source evidence.
 
-### 1. 轻量确定待审核能力
+## Review process
 
-先读取 `package.json`、目录结构和目标 Skill 的 frontmatter/标题，只确认包类型、待审核目标和相关 Tool。不要在这一步信任详细流程文案或测试预期。
+### 1. Identify the capability under review with minimal reading
 
-本 Skill 不负责从源码重新枚举全部主要目标，也不输出 `完整`、`基本可用`、`阻塞`、`未验证` 的全目标状态。若范围是否完整本身存在疑问，转交 `code2skill-review-flow`。
+First read `package.json`, the directory structure, and the target Skill's frontmatter/title only to identify the package type, review target, and related Tools. Do not trust detailed workflow text or test expectations at this stage.
 
-### 2. 从源码重新推导请求语义
+This Skill does not re-enumerate every major goal from source code and does not output whole-scope states of `complete`, `basically usable`, `blocked`, or `unverified`. If completeness of the scope is itself in question, hand it off to `code2skill-review-flow`.
 
-从目标入口找到真实 API wrapper、RPC stub、Service 方法、消息 Producer 或任务提交点，并沿数据流追踪至最终调用目标与操作、参数/消息/任务载荷、运行上下文、同步返回、异常、发布回执或任务 ID。HTTP 场景下表现为 method、URL、query、header、body 或 multipart。
+### 2. Re-derive request semantics from source code
 
-只在工作记忆中记录最小对照：
+From the target entry point, find the real API wrapper, RPC stub, Service method, message Producer, or task-submission point. Trace the data flow to the final invocation target and operation, parameters/message/task payload, runtime context, synchronous return, errors, publication receipt, or task ID. In HTTP scenarios, these appear as method, URL, query, header, body, or multipart.
 
-```text
-业务含义
-→ 值的来源
-→ 页面、客户端状态或前序响应
-→ 确定性转换
-→ 最终调用字段（HTTP 场景下为 method/URL/query/header/body/multipart，RPC 场景下为 service/method/arguments，消息场景下为 destination/key/payload）
-→ 所属目标和条件分支
-```
-
-值的来源至少区分：
-
-- 用户输入；
-- 客户端固定值；
-- 前序接口响应或用户选中的动态选项；
-- 客户端计算或转换结果；
-- Host 注入的身份、认证或附件；
-- 可选、条件出现或确实未知的值。
-
-找不到证据时记录具体缺失模块或符号；不要猜测，也不要扩大到无关源码。
-
-### 3. 检查五类源码一致性
-
-#### 字段来源与跨 Tool 交接
-
-- 同名字段分别判断来源、赋值过程和最终用途。
-- 查询筛选值、入口类型、用户选中值和最终写入值不能因为 API 字段同名而直接复用。
-- 前一个 Tool 的响应经过选择、过滤或映射后，下一个 Tool 应接收真正需要的值。
-- 当客户端把当前选中结果的多个字段或整行对象展开、合并或转发给下游请求时，核对 Function 是否保留该选中记录输入、源码中的合并顺序和显式覆盖关系；不得只检查 ID 是否存在。
-- 核对 Skill 的标准示例是否真正使用 Function 已提供的选中记录交接。若源码只证明整行路径、尚未证明 ID-only 等价，示例不能把整行支持隐藏成无人知道的可选入口。
-- 公共 Function/MCP 参数使用清楚的业务名称，内部再映射回真实 API 字段。
-- 动态选项不得冻结为一次样本枚举。
-
-重点比较源码中的数据来源与生成包要求 Agent 提供的值，不只比较字段名。
-
-#### 确定性请求转换
-
-检查所有会改变 wire value 的源码逻辑，包括：
-
-- 固定时间拼接、时区和 ISO/日期格式化；
-- 数字、字符串、布尔和空值之间的明确转换；
-- 数组连接或拆分；
-- 展示前后缀移除；
-- 字段改名、固定值和源码证明的默认值；
-- HTTP 场景：query 编码、header 组装和 multipart 字段；
-- RPC 场景：service/method 选择、参数顺序、命名/包装/序列化；
-- 消息/任务场景：destination/key/payload 构造、分区/路由键、任务名；
-- 应用内 Service 场景：DI 容器查找、事务/拦截器上下文注入；
-- 条件分支对调用字段的增删。
-
-源码明确的确定性转换应由 Function 稳定还原，不要求 Consumer Agent 每次猜测。同一业务值进入多个下游调用时，须按各使用点分别核对确定性转换与最终 wire，不得假设不同调用点表示相同；上游值进入页面前若被确定性别名/值归一化改写，须先核对归一化本身与各下游使用的归一化结果，不得把上游原始表示当下游可用值。公共输入若接收业务值，Function 完成转换；若接收已转换 wire value，Function、MCP 和 Skill 必须一致说明。
-
-#### 每个目标自己的调用链
-
-- 每个 Skill 只说明当前目标源码调用链中的 Tool。
-- 共享查询、预校验或提交能力不自动成为所有 Skill 的必经步骤。
-- 条件步骤只绑定到源码证明的目标或分支。
-- Skill 不得把页面展示顺序写成不可绕过的 Workflow。
-
-这里检查所选目标调用链是否准确，不据此宣称完整目标范围都已覆盖。
-
-#### 有限追踪关键 import
-
-只继续追踪影响以下内容的 import：
-
-- API 请求构造；
-- 请求字段转换；
-- 认证头、公开身份或租户注入；
-- 附件凭证、上传请求、URL 生成和下游字段绑定。
-
-纯 UI、样式和与请求无关的状态工具不展开。关键实现位于授权源码内时，读到足以还原请求；无法解析时指出具体模块或源码缺口。
-
-附件链只检查源码证明的业务部分：
+Record only this minimal comparison in working memory:
 
 ```text
-Host 提供的受信附件路径或引用
-→ 业务上传凭证
-→ 实际上传调用
-→ 业务 URL
-→ 后续调用字段
+business meaning
+→ value source
+→ page, client state, or preceding response
+→ deterministic transformation
+→ final invocation field (method/URL/query/header/body/multipart for HTTP; service/method/arguments for RPC; destination/key/payload for messaging)
+→ owning goal and conditional branch
 ```
 
-Code2Skill 不负责聊天接入、文件接收、下载或通用 Host 沙箱，也不得引导 Agent 猜测本地路径。
+At minimum, distinguish these value sources:
 
-#### 运行目标与接入配置
+- user input;
+- client-side constant;
+- preceding interface response or a dynamic option selected by the user;
+- client-computed or transformed result;
+- identity, authentication, or attachment injected by the Host;
+- optional, conditionally present, or genuinely unknown value.
 
-- 区分源码中的环境配置与 Function 的运行配置；业务服务接入配置属于 Host 部署配置，不是用户业务输入。
-- 业务 API 基址不得成为公共 Tool 参数；接入配置（RPC 客户端、Broker 连接、运行上下文等）也不得成为公共 Tool 参数，也不得默认回退到源码中的测试、预发或生产域名；缺少必需配置时应在调用前停止。
-- 源码发现的环境地址可以出现在 `MCP-SETUP.md` 作为部署参考，但不能因此声称某个环境已经配置、连接或验证。
-- 公开协议规定的固定 endpoint，以及后端运行时返回的对象存储、回调或预签名地址，不作为静态业务基址误报。
+When evidence cannot be found, record the specific missing module or symbol. Do not guess and do not expand into unrelated source code.
 
-若隐藏默认配置会让当前目标发往错误环境或错误服务，按 `P1`；当前可能工作但依赖 Producer 环境、固定测试域名或 Agent 临时提供接入配置，按 `P2`。
+### 3. Check five categories of source consistency
 
-### 4. 对照 Function、MCP 和 Skill
+#### Field provenance and cross-Tool handoffs
 
-按以下顺序比较：
+- For fields with the same name, determine their source, assignment process, and final purpose separately.
+- A query filter value, entry type, user-selected value, and final write value must not be reused directly merely because the API fields have the same name.
+- After a preceding Tool's response is selected, filtered, or mapped, the next Tool should receive the value it actually needs.
+- When the client spreads, merges, or forwards multiple fields or the entire object from the selected record into a downstream request, verify that the Function preserves the selected-record input, source-defined merge order, and explicit override relationship. Do not check only whether an ID exists.
+- Verify that the Skill's standard example actually uses the selected-record handoff exposed by the Function. If the source proves only the whole-record path and does not yet prove ID-only equivalence, the example must not hide whole-record support as an optional entry point that nobody would discover.
+- Public Function/MCP parameters should use clear business names and map back to the actual API fields internally.
+- Do not freeze dynamic options into a one-time sample enumeration.
 
-1. Function 是否按源码构造最终业务调用；
-2. MCP 是否直接、宽松地暴露同一 Function 和公共语义；
-3. Skill 是否准确描述当前目标的调用链、动态信息和停止条件；
-4. 三者是否对字段来源、转换、认证、运行接入配置和附件前提保持一致。
+Focus on comparing value provenance in source code with the values that the generated package asks the Agent to provide, not merely on comparing field names.
 
-只在 Schema 会阻断或改变调用链时检查它。不要要求严格枚举、严格输出 Schema或复制后端业务校验；真实响应、常见类型差异和业务判断仍交给 Consumer Agent 与后端。
+#### Deterministic request transformations
 
-### 5. 测试只能作为回归手段
+Check all source logic that changes a wire value, including:
 
-完成源码推导和产物比较后，才查看现有测试。绿色测试只能证明实现符合测试作者的预期，不能证明预期来自源码。
+- fixed time concatenation, time zones, and ISO/date formatting;
+- explicit conversions among numbers, strings, booleans, and null-like values;
+- array joining or splitting;
+- removal of display prefixes or suffixes;
+- field renaming, constants, and source-proven defaults;
+- HTTP: query encoding, header assembly, and multipart fields;
+- RPC: service/method selection, argument order, naming/wrapping/serialization;
+- messaging/tasks: destination/key/payload construction, partition/routing keys, and task names;
+- in-application Service: DI-container lookup and transaction/interceptor context injection;
+- conditional addition or removal of invocation fields.
 
-可以运行已确认不会访问真实环境的 dry-run 或 mock 测试，但不为审核安装、注册或部署 MCP。用户授权修复时，新增测试从本轮源码推导，覆盖发现问题的最终业务调用或 handoff；不扩展成所有字段、状态码或业务规则的组合矩阵。
+Deterministic transformations made explicit by the source should be reproduced reliably by the Function rather than requiring the Consumer Agent to guess each time. When the same business value enters multiple downstream invocations, verify the deterministic transformation and final wire representation separately at each use site; do not assume that different invocation sites use the same representation. If an upstream value is deterministically rewritten by alias or value normalization before it reaches the page, first verify the normalization itself and the normalized result used by each downstream invocation; do not treat the upstream raw representation as a usable downstream value. If a public input accepts a business value, the Function performs the transformation. If it accepts an already-transformed wire value, the Function, MCP, and Skill must all say so consistently.
 
-选中记录交接的最小反例测试使用两条字段值不同的匿名记录：分别选择后生成下游调用，确认第二次调用没有残留第一次选择的字段，并验证源码证明的覆盖顺序。若 Function 已支持整行交接、上游结果也可取得，只是 Skill 示例遗漏该用法，通常记为 `P2`；只有生成包无法传递形成终端业务调用所必需的记录信息，或必然构造错误调用时，才记为 `P1`。
+#### Each goal's own invocation chain
 
-## 输出结论
+- Each Skill describes only the Tools in the source invocation chain for its current goal.
+- Shared queries, prechecks, or submission capabilities do not automatically become mandatory steps for every Skill.
+- Conditional steps bind only to goals or branches proven by source code.
+- A Skill must not turn page-display order into an unavoidable Workflow.
 
-在当前会话中直接回复，不创建审核文件。先给源码一致性结论，再按严重程度列问题：
+This section checks whether the selected goal's invocation chain is accurate. It does not support a claim that the entire goal scope has been covered.
 
-- `P1`：会让所选目标必然形成错误请求、遗漏必要能力/交接，或错误增加必经步骤；
-- `P2`：当前可能工作，但依赖 Agent 猜测、隐式格式或不可移植前提，稳定性不足；
-- 边界说明：授权源码不足，无法确认，不伪装成缺陷或通过。
+#### Bounded tracing of critical imports
 
-每项问题包含受影响目标或 Tool、源码位置、生成包位置、实际差异、对请求的影响和最小修复方式。
+Continue tracing only imports that affect:
 
-若没有发现问题，只能说明上述五类请求语义在当前授权范围内未发现差异。明确真实接口未验证、后端业务是否接受未验证，以及测试通过不等于端到端可用。不要把本 Skill 的结果当成全目标主流程完成度结论。
+- API request construction;
+- request-field transformations;
+- authentication headers, public identity, or tenant injection;
+- attachment credentials, upload requests, URL generation, and downstream field binding.
+
+Do not expand pure UI, styling, or state utilities unrelated to requests. When critical implementation lies within the authorized source, read enough to reconstruct the request. When it cannot be resolved, identify the specific module or source gap.
+
+For attachment chains, check only the source-proven business portion:
+
+```text
+trusted attachment path or reference supplied by the Host
+→ business upload credential
+→ actual upload invocation
+→ business URL
+→ downstream invocation field
+```
+
+Code2Skill is not responsible for chat integration, file reception, downloading, or a generic Host sandbox, and it must not instruct the Agent to guess local paths.
+
+#### Runtime target and integration configuration
+
+- Distinguish environment configuration in source code from Function runtime configuration. Business-service integration configuration belongs to Host deployment configuration, not user business input.
+- A business API base URL must not become a public Tool parameter. Integration configuration such as an RPC client, Broker connection, or runtime context must not become a public Tool parameter either, and it must not default back to test, staging, or production domains found in source code. Stop before invocation when required configuration is missing.
+- Environment addresses discovered in source may appear in `MCP-SETUP.md` as deployment references, but this does not justify claiming that any environment has been configured, connected, or verified.
+- Do not misreport a fixed endpoint defined by a public protocol, or an object-storage, callback, or presigned address returned by the backend at runtime, as a static business base URL.
+
+Classify a hidden default configuration that would send the current goal to the wrong environment or service as `P1`. Classify a setup that may currently work but depends on the Producer environment, a fixed test domain, or integration configuration temporarily supplied by the Agent as `P2`.
+
+### 4. Compare the Function, MCP, and Skill
+
+Compare in this order:
+
+1. Does the Function construct the final business invocation according to source code?
+2. Does MCP expose the same Function and public semantics directly and permissively?
+3. Does the Skill accurately describe the current goal's invocation chain, dynamic information, and stop conditions?
+4. Are all three consistent about field provenance, transformations, authentication, runtime integration configuration, and attachment prerequisites?
+
+Inspect a Schema only when it would block or alter the invocation chain. Do not require strict enumerations, strict output Schemas, or duplicated backend business validation. Real responses, common type variations, and business decisions remain with the Consumer Agent and backend.
+
+### 5. Tests are regression tools only
+
+Read existing tests only after completing the source derivation and artifact comparison. Green tests prove only that the implementation matches the test author's expectations; they do not prove that those expectations came from source code.
+
+You may run dry-run or mock tests that are confirmed not to access real environments, but do not install, register, or deploy MCP for review. When the user authorizes fixes, derive new tests from this review's source analysis and cover the affected final business invocation or handoff. Do not expand them into a combination matrix for every field, status code, or business rule.
+
+The minimal counterexample test for selected-record handoff uses two anonymous records with different field values. Select each record and construct the downstream invocation; verify that the second invocation retains no fields from the first selection and that it follows the source-proven override order. If the Function already supports whole-record handoff and the upstream result exposes it, but the Skill example merely omits that usage, this is usually `P2`. Classify it as `P1` only when the generated package cannot carry record information required to form the terminal business invocation, or when it will necessarily construct the wrong invocation.
+
+## Output conclusion
+
+Reply directly in the current session; do not create a review file. Give the source-consistency conclusion first, then list findings by severity:
+
+- `P1`: necessarily causes the selected goal to form an incorrect request, omit a required capability or handoff, or incorrectly add a mandatory step;
+- `P2`: may currently work but depends on Agent guesswork, implicit formatting, or a non-portable prerequisite, so it is not stable enough;
+- boundary note: the authorized source is insufficient to confirm the point; do not disguise it as either a defect or a pass.
+
+For each finding, include the affected goal or Tool, source location, generated-package location, actual difference, request impact, and smallest repair.
+
+If no issue is found, say only that no difference was found in the five categories of request semantics above within the current authorized scope. Explicitly state that real interfaces were not verified, backend business acceptance was not verified, and passing tests do not mean end-to-end usability. Do not present this Skill's result as a whole-scope main-flow completion conclusion.

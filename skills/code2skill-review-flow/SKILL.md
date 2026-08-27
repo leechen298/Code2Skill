@@ -1,135 +1,139 @@
 ---
 name: code2skill-review-flow
-description: 从用户授权源码独立识别主要用户目标，轻量审核 Code2Skill 生成结果的代表性标准路径是否闭环；输出完整、基本可用、阻塞或未验证，不展开源码精确度审计。
+description: Review representative Code2Skill main flows for closure / 轻量审核 Code2Skill 代表性主流程是否闭环。
 ---
 
 # Code2Skill Main Flow Review
 
-审核已有 Code2Skill 生成结果能否帮助 Agent 沿代表性标准路径完成主要用户目标。它只回答“主流程是否基本可用”，不负责逐字段证明生成结果与源码完全一致。
+The complete Chinese version is available at [references/SKILL.zh-CN.md](references/SKILL.zh-CN.md).
 
-本 Skill 默认只读、离线、源码优先。它可以由独立 Agent 使用，也可以在 `code2skill-generate` 生成完成后单独调用；不生成 Contract、证据矩阵、审核报告或其他交付文件。
+Follow the user's language for the final reply, review conclusions, and all user-facing content.
 
-## 输入与边界
+Review whether an existing Code2Skill-generated package can help an Agent complete the main user goals along representative standard paths. This Skill answers only whether the main flows are basically usable; it does not prove field by field that the generated package fully matches the source code.
 
-开始前确定：
+This Skill is read-only, offline, and source-first by default. It may be used by an independent Agent or invoked separately after `code2skill-generate` completes. It does not generate Contracts, evidence matrices, review reports, or other deliverable files.
 
-- 待审核生成包路径；
-- 用户明确授权的源码根和页面、目录、接口或功能范围；
-- 是否只审核部分主要目标；
-- 用户是否同时授权修复；未明确授权时保持只读。
+## Inputs and Boundaries
 
-只审核 `code2skill-generate` 的默认生成结果。遇到高级验证格式、旧版或无法识别的目录时，说明不适用，不要套用本流程。
+Before starting, determine:
 
-只搜索授权源码根。存在客户端或 Consumer 时，以客户端/Consumer 实际触发的业务调用为主；没有客户端时，从用户指定的公开 API、RPC、Service、消息或任务入口开始。只追踪证明代表性标准路径所需的代码，不深入后端 Service、数据库、消息下游、审批或完整业务校验。
+- the path of the generated package to review;
+- the source roots and page, directory, interface, or feature scope explicitly authorized by the user;
+- whether only some main goals should be reviewed;
+- whether the user has also authorized fixes; remain read-only when no such authorization is explicit.
 
-默认禁止：
+Review only the default output of `code2skill-generate`. When encountering an advanced-validation format, a legacy version, or an unrecognized directory, explain that this process does not apply instead of forcing the directory through it.
 
-- 调用真实业务接口或写接口；
-- 为了审核安装、注册或部署 MCP；
-- 扫描整台机器寻找未授权源码；
-- 修改生成包、源码或测试；
-- 把临时目标清单和路径推导写入仓库。
+Search only the authorized source roots. When a client or Consumer exists, focus on business invocations actually triggered by the client/Consumer. When no client exists, start from the public API, RPC, Service, message, or task entry point specified by the user. Trace only the code required to prove a representative standard path; do not descend into backend Services, databases, downstream messaging, approvals, or complete business validation.
 
-用户明确授权修复时，可以修正阻塞问题并补针对性离线测试；修复授权不等于真实接口调用授权。
+By default, do not:
 
-## 保持复核独立
+- call real business interfaces or write interfaces;
+- install, register, or deploy MCP for the review;
+- scan the entire machine for unauthorized source code;
+- modify the generated package, source code, or tests;
+- write temporary goal lists or path derivations into the repository.
 
-优先让没有参与生成的 Agent 或新会话执行。本 Skill 只接受源码范围、生成包路径和用户目标，不把 Producer 的目标清单、结论或绿色测试当成事实。
+When the user explicitly authorizes fixes, blocking issues may be corrected and focused offline tests may be added. Authorization to fix does not authorize calls to real interfaces.
 
-只有同一个 Agent 可用时，执行冷复核：
+## Keep the Review Independent
 
-1. 把生成包声称的目标和测试预期视为未验证假设；
-2. 先从源码入口独立识别主要用户目标；
-3. 在工作记忆中形成最小标准路径；
-4. 再读取生成包进行比较；
-5. 最后才查看或运行已有测试。
+Prefer an Agent or new session that did not participate in generation. This Skill accepts only the source scope, generated-package path, and user goals; it does not treat the Producer's goal list, conclusions, or green tests as facts.
 
-## 审核流程
+When only the same Agent is available, perform a cold review:
 
-### 1. 从源码独立识别主要目标
+1. Treat the goals claimed by the generated package and the test expectations as unverified hypotheses.
+2. First identify the main user goals independently from the source entry points.
+3. Form the minimum standard paths in working memory.
+4. Then read the generated package and compare it.
+5. Only afterward inspect or run the existing tests.
 
-从用户指定的页面、目录、接口或功能入口识别能够独立完成的主要用户目标。一个主要目标代表用户可感知的终端结果，不是每个输入框、API、文件或页面分支。
+## Review Process
 
-此时不要读取生成包的详细实现，也不要把已有 Skill 列表当成目标全集。先形成临时目标清单，再轻量读取生成包的 `package.json`、目录结构和各 Skill 的 frontmatter/标题，比较：
+### 1. Independently Identify Main Goals from Source
 
-- 源码目标是否有对应 Skill 或等价独立入口；
-- 多个独立目标是否被错误合并；
-- 一个目标是否被按接口机械拆散；
-- 生成包是否声明了没有源码依据的目标。
+From the page, directory, interface, or feature entry point specified by the user, identify the main user goals that can be completed independently. A main goal represents a user-visible terminal outcome, not every input field, API, file, or page branch.
 
-### 2. 每个目标只建立一条代表性标准路径
+At this stage, do not read the detailed implementation of the generated package and do not treat its existing Skill list as the complete goal set. First form a temporary goal list, then lightly inspect the generated package's `package.json`, directory structure, and each Skill's frontmatter/title to compare:
 
-对每个主要目标，只在工作记忆中记录：
+- whether each source-derived goal has a corresponding Skill or equivalent independent entry point;
+- whether multiple independent goals were incorrectly merged;
+- whether one goal was mechanically split by interface;
+- whether the generated package claims goals with no source basis.
+
+### 2. Build Only One Representative Standard Path per Goal
+
+For each main goal, record only the following in working memory:
 
 ```text
-目标入口
-→ 完成目标所需的关键信息
-→ 必要 Function/MCP
-→ 上下游 Tool 交接
-→ 终端业务调用、停止条件或可判断结果
+Goal entry point
+→ Key information required to complete the goal
+→ Required Function/MCP
+→ Upstream-to-downstream Tool handoff
+→ Terminal business invocation, stop condition, or interpretable result
 ```
 
-信息来源至少区分用户输入、前序响应、页面或客户端状态、Host 输入及确实未知的值。只有在它影响终端业务调用能否形成时，才检查确定性转换或关键 import。
+At minimum, distinguish information originating from user input, prior responses, page or client state, Host input, and genuinely unknown values. Inspect deterministic transformations or critical imports only when they affect whether the terminal business invocation can be formed.
 
-一项目标默认只核对一条代表性标准路径。隐藏入口、编辑模式、可选分支和所有条件组合只有在用户明确指定，或它们是该标准路径的必经条件时才展开。
+By default, verify only one representative standard path for each goal. Expand hidden entry points, edit modes, optional branches, and all condition combinations only when the user explicitly specifies them or when they are mandatory conditions of that standard path.
 
-对复杂写目标，除代表性标准路径外，额外核对一个真实存在的关键决策分支（不是所有分支）。
+For a complex write goal, verify one additional real critical decision branch beyond the representative standard path—not every branch.
 
-### 3. 对照生成包
+### 3. Compare Against the Generated Package
 
-按最小范围比较：
+Compare only the minimum scope:
 
-1. Skill 是否提供当前目标的独立入口和必要引导；
-2. Function/MCP 是否具备完成标准路径的必要能力，并清楚声明 Host 必须提供的业务服务基址（HTTP 场景下即 API 基址，RPC/Service/消息/任务场景下为对应客户端、Broker 连接或运行上下文）；
-3. 前序响应、用户输入和 Host 输入是否能交给正确的下游 Tool；
-   若客户端标准路径会把当前选中结果的整行或多个随行字段交给下游调用，确认上游结果可被保留，且 Skill 会引导 Agent 使用 Function/MCP 已暴露的选中记录输入，而不是只展示未经证明等价的 ID-only 路径。
-4. 必经条件、附件或确认是否遗漏，或被错误套到其他目标；
-5. Agent 是否能构造终端业务调用（HTTP 场景下亦称终端请求），并根据实际响应继续沟通或停止。
-6. 是否遗漏会改变下一步的中间结果、停止点或写入前置；
-7. 是否把 Agent 补问、用户确认、页面顺序或普通业务校验误生成为 Tool 或全局 Workflow，不得把普通业务校验或页面顺序虚构为确定性 Guard（与上述共享 Tool 非全局前置、页面顺序非不可绕过 Workflow 一致）；
-8. 生成包声称的异步状态查询或结果对账能力是否有源码证据：无源码依据而生成的属于虚构能力，有源码依据而缺失的属于遗漏；
-9. 简单只读查询目标是否被过度拆分为多个 Tool 或 Skill。
+1. Whether the Skill provides an independent entry point and required guidance for the current goal.
+2. Whether Function/MCP has the capabilities required to complete the standard path and clearly declares the business service base required from the Host (the API base URL in HTTP scenarios; the corresponding client, Broker connection, or runtime context in RPC/Service/message/task scenarios).
+3. Whether prior responses, user input, and Host input can be handed to the correct downstream Tool.
+   If the client's standard path passes the entire currently selected row or multiple accompanying fields into a downstream invocation, confirm that the upstream result can be preserved and that the Skill guides the Agent to use the selected-record input exposed by Function/MCP, instead of showing only an ID-only path whose equivalence has not been proven.
+4. Whether mandatory conditions, attachments, or confirmations are missing or incorrectly applied to another goal.
+5. Whether the Agent can construct the terminal business invocation (also called the terminal request in HTTP scenarios) and continue communicating or stop based on the actual response.
+6. Whether an intermediate result, stop point, or pre-write prerequisite that changes the next step is missing.
+7. Whether Agent follow-up questions, user confirmation, page order, or ordinary business validation were incorrectly generated as a Tool or global Workflow. Do not fabricate ordinary business validation or page order as a deterministic Guard, consistent with the rules above that a shared Tool is not a global prerequisite and page order is not an unskippable Workflow.
+8. Whether an asynchronous status-query or result-reconciliation capability claimed by the generated package has source evidence: a generated capability with no source basis is fabricated, while a source-backed capability that is absent is an omission.
+9. Whether a simple read-only query goal was over-split into multiple Tools or Skills.
 
-共享 Tool 是可复用原子能力，不自动成为所有目标的全局前置步骤。页面展示顺序也不自动成为运行时不可绕过的 Workflow。
+A shared Tool is a reusable atomic capability; it does not automatically become a global prerequisite for every goal. Page presentation order also does not automatically become an unskippable runtime Workflow.
 
-业务服务接入配置（HTTP 场景下为 API 基址，RPC/Service/消息/任务场景下为对应客户端、运行上下文或 Broker 连接）属于 Host 部署配置，不是用户业务输入。若所有标准路径都因缺少未声明的必需接入配置而无法发起调用，视为主流程缺口；若只是存在测试、预发或生产默认域名等可移植性疑问，记录线索并交给 `code2skill-review-source`，不在轻量主流程审核中扩大。
+Business service integration configuration—the API base URL in HTTP scenarios, or the corresponding client, runtime context, or Broker connection in RPC/Service/message/task scenarios—is Host deployment configuration, not a user business input. If every standard path is unable to invoke the service because a required integration configuration was not declared, treat this as a main-flow gap. If the concern is only portability caused by a default test, staging, or production domain, record it as a lead for `code2skill-review-source`; do not expand it within this lightweight main-flow review.
 
-### 4. 给出主流程状态
+### 4. Assign Main-Flow Status
 
-每个主要目标只使用以下状态之一：
+Use exactly one of these statuses for each main goal:
 
-- `完整`：至少一条源码证明的代表性标准路径已经闭环，且在本次轻量范围内没有已知主流程缺口；
-- `基本可用`：代表性标准路径能够完成且没有阻塞，但仍有可恢复的主流程不确定性，或依赖 Agent、用户和 Host 补充处理；
-- `阻塞`：缺少主要 Skill、必要 Tool/交接，必然形成错误请求，或把其他目标的步骤错误设为全局前置；
-- `未验证`：授权源码或离线证据不足，无法判断请求链是否闭环。
+- `Complete`: at least one source-proven representative standard path closes the loop, with no known main-flow gap within this lightweight scope;
+- `Basically usable`: the representative standard path can complete without a blocker, but recoverable main-flow uncertainty remains or additional handling by the Agent, user, or Host is required;
+- `Blocked`: a main Skill, required Tool/handoff is missing, an incorrect request is inevitable, or a step from another goal was incorrectly made a global prerequisite;
+- `Unverified`: authorized source or offline evidence is insufficient to determine whether the request chain closes the loop.
 
-未调用真实 API 是单独的验证边界，不会自动把源码和离线检查已经闭环的目标降为 `未验证`。
+Not calling a real API is a separate validation boundary. It does not automatically downgrade a goal whose source and offline checks already close the loop to `Unverified`.
 
-只把 `阻塞` 当成交付前必须修复的问题。`完整` 只代表本次轻量范围内主流程闭环，不等于逐字段源码精确或真实 API 已验证。发现字段来源、确定性转换或关键依赖的非阻塞差异时，只记录为待进一步复核的线索，并推荐使用 `code2skill-review-source` 深入检查，不在本 Skill 中扩大范围。
+Treat only `Blocked` as requiring a fix before delivery. `Complete` means only that the main flow closes within this lightweight scope; it does not mean field-level source accuracy or real-API validation. When a non-blocking difference in field origin, deterministic transformation, or critical dependency is found, record it only as a lead for further review and recommend `code2skill-review-source` for deeper inspection instead of expanding this Skill's scope.
 
-若 Function 已支持传入完整选中记录、上游结果也能提供该记录，但 Skill 示例只展示较简化的 ID-only 调用，不要据此直接判定主流程阻塞：当没有证据证明 ID-only 必然失败时，记为可恢复的引导缺口或 `P2`。只有无法把必需记录交给下游，或标准路径必然生成错误请求时，才判为 `阻塞`。
+If the Function already accepts the complete selected record and the upstream result provides it, but the Skill example shows only a simplified ID-only invocation, do not classify the main flow as blocked on that basis alone. When no evidence proves that ID-only must fail, record it as a recoverable guidance gap or `P2`. Classify it as `Blocked` only when the required record cannot be handed downstream or the standard path inevitably constructs an incorrect request.
 
-### 5. 测试只是辅助证据
+### 5. Tests Are Supporting Evidence Only
 
-完成源码目标和标准路径推导后，才查看包内测试。绿色测试只能证明实现符合测试作者的预期，不能证明目标没有遗漏。
+Inspect package tests only after deriving the source goals and standard paths. Green tests prove only that the implementation matches the test author's expectations; they do not prove that no goal is missing.
 
-可以运行已确认不会访问真实环境的 dry-run 或 mock 测试，但不得为了本次审核安装、部署或注册 MCP。若用户授权修复，新增测试只覆盖发现的阻塞路径，不重建全部目标、字段和分支矩阵。
+You may run dry-run or mock tests that are confirmed not to access a real environment, but do not install, deploy, or register MCP for this review. If the user authorizes fixes, add tests only for the discovered blocking paths; do not rebuild a complete matrix of goals, fields, and branches.
 
-## 输出结论
+## Output the Conclusion
 
-在当前会话中直接回复，不创建审核文件。先给总体结论，再给逐目标状态：
+Reply directly in the current session; do not create review files. Give the overall conclusion first, then the per-goal statuses:
 
-| 主要目标 | 状态 | 标准路径依据或缺口 | 真实接口状态 |
+| Main goal | Status | Standard-path evidence or gap | Real-interface status |
 |---|---|---|---|
 
-然后只列：
+Then list only:
 
-- `P1`：阻塞主要目标，必须修复后才能判为完整或基本可用；
-- `P2`：主流程可完成，但存在可恢复的流程不确定性，不阻止交付；
-- 边界说明：授权源码或离线证据不足，不能确认。
+- `P1`: blocks a main goal and must be fixed before that goal can be classified as Complete or Basically usable;
+- `P2`: the main flow can complete, but a recoverable flow uncertainty remains and does not block delivery;
+- Boundary note: authorized source or offline evidence is insufficient to confirm the point.
 
-判定标尺：只有必然提前写入、必然走错分支、缺失必要 Tool/交接或错误增加全局前置时才判 P1（阻塞）；可由 Agent 恢复的引导问题仍为 P2。
+Classification threshold: classify an issue as P1 (`Blocked`) only when it inevitably writes too early, inevitably takes the wrong branch, lacks a required Tool/handoff, or incorrectly adds a global prerequisite. Guidance issues recoverable by the Agent remain P2.
 
-每项问题包含受影响目标、源码位置、生成包位置、对标准路径的影响和最小修复方式。最终明确区分：文件存在、离线可加载、主流程闭环、源码精确、真实业务可用和已经部署。
+Each issue must include the affected goal, source location, generated-package location, impact on the standard path, and the minimum fix. The final response must clearly distinguish file existence, offline loadability, main-flow closure, source accuracy, real business usability, and deployment status.
 
-以上检查不改变本 Skill 的轻量定位——仍只评估代表性主流程，不展开源码精确审计（源码级核对仍交 code2skill-review-source）。
+These checks do not change this Skill's lightweight positioning: it still evaluates only representative main flows and does not expand into a source-precision audit. Source-level review remains the responsibility of `code2skill-review-source`.

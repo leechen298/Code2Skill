@@ -1,35 +1,35 @@
-# MCP 安装与运行
+# MCP Installation and Runtime
 
-> 本模板以 `node-stdio` runtime profile 为例。`core-export-v1` 默认包格式的当前实现即 `node-stdio`；当目标技术栈不是 Node/stdio 时，使用对应语言的依赖安装命令与 MCP Server 启动命令，但安装、注册、连通、验证、部署的状态分层保持不变。生成时用实际包路径、Agent ID、环境变量和 dry-run 变量替换占位符；没有对应环境变量时删除示例项。不得在交付文件中保留占位符或真实凭证。
+> This template uses the `node-stdio` runtime profile as an example. The current implementation of the default `core-export-v1` package format is `node-stdio`. When the target stack is not Node/stdio, use the dependency installation and MCP server startup commands for that language, while preserving the separate states for installation, registration, connectivity, validation, and deployment. During generation, replace placeholders with the actual package path, agent ID, environment variables, and dry-run variable; remove example entries when no corresponding environment variable exists. Do not leave placeholders or real credentials in delivered files.
 
-## 安装 Skill
+## Install the Skill
 
 ```bash
 npx skills add <bundle-path> --skill '*' --agent <agent-id> --global --yes
 ```
 
-这一步只安装 Agent Skill，不会安装依赖、启动或注册 MCP Server，也不会注入认证信息。
+This step installs only the Agent Skill. It does not install dependencies, start or register the MCP server, or inject authentication information.
 
-## 安装 MCP 依赖
+## Install MCP Dependencies
 
-当前 `node-stdio` profile 示例。生成包带有 `package-lock.json` 时：
+Current `node-stdio` profile example. When the generated package includes `package-lock.json`:
 
 ```bash
 cd <absolute-bundle-path>
 npm ci
 ```
 
-没有 lockfile 时使用 `npm install`。
+Use `npm install` when there is no lockfile.
 
-## 本地 stdio MCP
+## Local stdio MCP
 
-当前 `node-stdio` profile 示例。默认生成包使用 MCP 标准 stdio 传输，由 Consumer Host 启动本地子进程：
+Current `node-stdio` profile example. The default generated package uses the standard MCP stdio transport, with the Consumer Host starting a local child process:
 
 ```bash
 node <absolute-bundle-path>/mcp-tool/index.mjs
 ```
 
-把以下中立启动参数映射到 Consumer Host 的 MCP 注册入口：
+Map the following runtime-neutral launch parameters to the Consumer Host's MCP registration interface:
 
 ```json
 {
@@ -42,48 +42,48 @@ node <absolute-bundle-path>/mcp-tool/index.mjs
 }
 ```
 
-这是可移植的启动描述，不是某个 Host 的私有配置文件。使用绝对路径；stdout 仅输出 MCP 协议消息，普通日志写入 stderr。
+This is a portable launch description, not a private configuration file for a particular Host. Use absolute paths. Write only MCP protocol messages to stdout and ordinary logs to stderr.
 
-## 远程 MCP
+## Remote MCP
 
-只有本包已经被独立部署为远程服务时，才按 Consumer Host 的方式注册 Streamable HTTP endpoint。Code2Skill 不负责部署远程网关，也不把某个 Host 的 `mcpServers` 等配置惯例写成 MCP 协议要求。
+Register a Streamable HTTP endpoint through the Consumer Host only when this package has already been independently deployed as a remote service. Code2Skill does not deploy remote gateways or present Host conventions such as `mcpServers` as MCP protocol requirements.
 
-## 环境变量与认证
+## Environment Variables and Authentication
 
-- 只列出源码或 Runtime Profile 能证明的环境变量。
-- 调用业务 API 时，为每个独立服务列出语义明确的必需基址变量，例如 `CODE2SKILL_<FEATURE>_<SERVICE>_BASE_URL`。实际地址由 Consumer Host 显式注入；Function 不默认指向测试、预发或生产环境。
-- 源码中发现的各环境地址只能作为部署参考，不是运行默认值。缺少必需基址时应在网络请求前停止，不得静默回退。
-- 业务 API 基址不作为 Tool 参数交给 Agent；Agent 只提供业务调用参数。
-- 认证、用户和租户身份由运行环境通过环境变量或已有凭证机制注入。
-- 不把 token、Cookie、密钥、会话值或真实凭证写入 Skill、源码、示例命令或本文件。
-- dry-run 变量：`<DRY_RUN_VARIABLE>`，仅在值为 `1` 时生效。
+- List only environment variables proven by source code or the Runtime Profile.
+- When calling business APIs, list a clearly named required base-URL variable for every independent service, such as `CODE2SKILL_<FEATURE>_<SERVICE>_BASE_URL`. The Consumer Host explicitly injects the actual address. The Function must not default to test, staging, or production environments.
+- Environment addresses found in source code are deployment references only, not runtime defaults. When a required base URL is missing, stop before the network request; do not silently fall back.
+- Do not expose the business API base URL to the agent as a tool parameter. The agent supplies only business invocation parameters.
+- The runtime injects authentication and user/tenant identity through environment variables or an existing credential mechanism.
+- Do not write tokens, cookies, secrets, session values, or real credentials into the Skill, source code, example commands, or this file.
+- Dry-run variable: `<DRY_RUN_VARIABLE>`; it takes effect only when set to `1`.
 
-## 未满足条件
+## Unmet Prerequisites
 
-当目标能力缺少可安全调用的客户端、运行上下文、依赖或安全入口时，本包必须诚实标记为 `requires-host-integration`，不得在 `MCP-SETUP.md`、Skill 或 Function 中用说明文档冒充可运行能力。此时 `MCP-SETUP.md` 应明确列出：
+When the target capability lacks a safely callable client, runtime context, dependencies, or a safe entry point, the package must honestly mark it as `requires-host-integration`. Do not use documentation in `MCP-SETUP.md`, the Skill, or the Function to pretend that the capability is runnable. In that case, `MCP-SETUP.md` must explicitly list:
 
-- 缺失的运行时设施（如原应用进程、依赖注入容器、特定语言的 SDK、消息/任务 Broker 连接、附件解析服务等）；
-- 部署方需要补充的接入动作；
-- 该能力当前不可自动运行验证，真实调用前必须由 Consumer Host 或目标系统完成接入。
+- Missing runtime facilities, such as the original application process, dependency-injection container, language-specific SDK, message/task Broker connection, or attachment-resolution service.
+- Integration work the deployer must supply.
+- The fact that the capability cannot currently undergo automatic runtime validation and that the Consumer Host or target system must complete the integration before a live call.
 
-## 离线检查
+## Offline Checks
 
-当前 `node-stdio` profile 示例：
+Current `node-stdio` profile example:
 
 ```bash
 <DRY_RUN_VARIABLE>=1 npm test
 ```
 
-注册后使用 MCP client 完成 `initialize`、`tools/list` 和安全 mock/dry-run 的代表性 `tools/call`。离线测试使用 `.invalid`、本地 mock 或注入的假基址，并验证缺少必需基址时不会发起网络请求。真实业务接口默认不调用；只有用户明确授权时才执行，写接口不得为了探针自动调用。
+After registration, use an MCP client to complete `initialize`, `tools/list`, and a representative safe mock/dry-run `tools/call`. Offline tests use `.invalid`, a local mock, or an injected fake base URL, and verify that no network request occurs when the required base URL is missing. Live business interfaces are not called by default. Call them only with explicit user authorization; write interfaces must never be called automatically as probes.
 
-## 状态边界
+## Status Boundaries
 
-- **Skill 已安装**：Agent 能发现 Skill。
-- **依赖已安装**：包的运行依赖存在。
-- **MCP 已注册**：Host 保存了启动参数或远程 URL。
-- **MCP 已连通**：`initialize` 和 `tools/list` 已通过。
-- **离线行为已验证**：mock/dry-run 测试通过。
-- **真实业务已验证**：授权的真实调用通过。
-- **已部署**：独立部署动作完成。
+- **Skill installed**: The agent can discover the Skill.
+- **Dependencies installed**: The package's runtime dependencies are present.
+- **MCP registered**: The Host has saved the launch parameters or remote URL.
+- **MCP connected**: `initialize` and `tools/list` have succeeded.
+- **Offline behavior verified**: Mock/dry-run tests have passed.
+- **Live business behavior verified**: Authorized live calls have passed.
+- **Deployed**: A separate deployment action has completed.
 
-这些状态必须分别报告，不能互相推导。
+Report these states separately. None can be inferred from another.

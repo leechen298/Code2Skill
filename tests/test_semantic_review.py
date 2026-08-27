@@ -7,6 +7,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MAIN_SKILL = REPO_ROOT / "skills" / "code2skill-generate" / "SKILL.md"
+MAIN_SKILL_ZH = (
+    REPO_ROOT
+    / "skills"
+    / "code2skill-generate"
+    / "references"
+    / "SKILL.zh-CN.md"
+)
 MAIN_AGENT = (
     REPO_ROOT
     / "skills"
@@ -15,6 +22,13 @@ MAIN_AGENT = (
     / "openai.yaml"
 )
 FLOW_SKILL = REPO_ROOT / "skills" / "code2skill-review-flow" / "SKILL.md"
+FLOW_SKILL_ZH = (
+    REPO_ROOT
+    / "skills"
+    / "code2skill-review-flow"
+    / "references"
+    / "SKILL.zh-CN.md"
+)
 FLOW_AGENT = (
     REPO_ROOT
     / "skills"
@@ -23,6 +37,13 @@ FLOW_AGENT = (
     / "openai.yaml"
 )
 SOURCE_SKILL = REPO_ROOT / "skills" / "code2skill-review-source" / "SKILL.md"
+SOURCE_SKILL_ZH = (
+    REPO_ROOT
+    / "skills"
+    / "code2skill-review-source"
+    / "references"
+    / "SKILL.zh-CN.md"
+)
 SOURCE_AGENT = (
     REPO_ROOT
     / "skills"
@@ -82,8 +103,109 @@ class SplitReviewSkillsTest(unittest.TestCase):
         self.assertEqual(len(discovered), len(set(discovered)))
         self.assertFalse((REPO_ROOT / "skills" / "code2skill").exists())
 
+    def test_three_skills_publish_english_entries_and_complete_chinese_versions(
+        self,
+    ) -> None:
+        expected = (
+            (
+                MAIN_SKILL,
+                MAIN_SKILL_ZH,
+                ("Default Generated Result", "source binding", "live business"),
+            ),
+            (
+                FLOW_SKILL,
+                FLOW_SKILL_ZH,
+                ("Main Flow Review", "representative standard path", "P1"),
+            ),
+            (
+                SOURCE_SKILL,
+                SOURCE_SKILL_ZH,
+                ("Source Review", "field provenance", "deterministic"),
+            ),
+        )
+
+        for english_path, chinese_path, english_markers in expected:
+            with self.subTest(skill=english_path.parent.name):
+                english = read(english_path)
+                chinese = read(chinese_path)
+                self.assertIn("(references/SKILL.zh-CN.md)", english)
+                self.assertIn("user's language", english)
+                self.assertRegex(frontmatter(english), r"[\u4e00-\u9fff]")
+                self.assertRegex(chinese, r"[\u4e00-\u9fff]")
+                self.assertEqual(
+                    re.findall(r"(?m)^(#+)\s", english),
+                    re.findall(r"(?m)^(#+)\s", chinese),
+                )
+                self.assertEqual(english.count("```"), chinese.count("```"))
+                for marker in english_markers:
+                    self.assertIn(marker, english)
+
+    def test_public_design_docs_and_generation_templates_are_bilingual(self) -> None:
+        pairs = (
+            (
+                REPO_ROOT
+                / "docs"
+                / "development"
+                / "workflow-aware-generation-v1.md",
+                REPO_ROOT
+                / "docs"
+                / "development"
+                / "workflow-aware-generation-v1.zh-CN.md",
+            ),
+            (
+                REPO_ROOT
+                / "skills"
+                / "code2skill-generate"
+                / "references"
+                / "vnext-architecture.md",
+                REPO_ROOT
+                / "skills"
+                / "code2skill-generate"
+                / "references"
+                / "vnext-architecture.zh-CN.md",
+            ),
+            *(
+                (
+                    REPO_ROOT
+                    / "skills"
+                    / "code2skill-generate"
+                    / "assets"
+                    / f"{name}.md",
+                    REPO_ROOT
+                    / "skills"
+                    / "code2skill-generate"
+                    / "assets"
+                    / f"{name}.zh-CN.md",
+                )
+                for name in (
+                    "core-MCP-SETUP",
+                    "core-feature-context",
+                    "MCP-SETUP",
+                    "feature-context",
+                )
+            ),
+        )
+
+        for english_path, chinese_path in pairs:
+            with self.subTest(document=english_path.name):
+                self.assertTrue(english_path.is_file())
+                self.assertTrue(chinese_path.is_file())
+                english = read(english_path)
+                chinese = read(chinese_path)
+                self.assertIsNone(re.search(r"[\u4e00-\u9fff]", english))
+                self.assertRegex(chinese, r"[\u4e00-\u9fff]")
+                self.assertEqual(
+                    re.findall(r"(?m)^(#+)\s", english),
+                    re.findall(r"(?m)^(#+)\s", chinese),
+                )
+                self.assertEqual(english.count("```"), chinese.count("```"))
+
+        english_index = read(REPO_ROOT / "docs" / "README.en.md")
+        self.assertNotIn("Chinese only", english_index)
+        self.assertNotIn("Chinese-only", english_index)
+
     def test_generator_does_not_claim_review_conclusions(self) -> None:
-        skill = read(MAIN_SKILL)
+        skill = read(MAIN_SKILL_ZH)
         agent = read(MAIN_AGENT)
         removed_reference = (
             REPO_ROOT
@@ -105,7 +227,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
     def test_flow_review_discovers_goals_before_trusting_generated_skills(
         self,
     ) -> None:
-        skill = read(FLOW_SKILL)
+        skill = read(FLOW_SKILL_ZH)
 
         assert_concepts(
             self,
@@ -132,7 +254,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
         )
 
     def test_flow_review_uses_lightweight_completion_statuses(self) -> None:
-        skill = read(FLOW_SKILL)
+        skill = read(FLOW_SKILL_ZH)
 
         for status in ("`完整`", "`基本可用`", "`阻塞`", "`未验证`"):
             with self.subTest(status=status):
@@ -158,7 +280,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
         self.assertIn("只把 `阻塞` 当成交付前必须修复的问题", skill)
 
     def test_flow_review_does_not_expand_into_source_fidelity_audit(self) -> None:
-        skill = read(FLOW_SKILL)
+        skill = read(FLOW_SKILL_ZH)
 
         self.assertIn("不负责逐字段证明生成结果与源码完全一致", skill)
         self.assertIn("推荐使用 `code2skill-review-source` 深入检查", skill)
@@ -167,7 +289,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
         self.assertIn("不生成 Contract、证据矩阵、审核报告", skill)
 
     def test_source_review_rederives_selected_request_semantics(self) -> None:
-        skill = read(SOURCE_SKILL)
+        skill = read(SOURCE_SKILL_ZH)
 
         assert_concepts(
             self,
@@ -207,7 +329,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
     def test_generator_preserves_selected_record_handoff_without_overconstraining(
         self,
     ) -> None:
-        skill = read(MAIN_SKILL)
+        skill = read(MAIN_SKILL_ZH)
         generated_results = read(REPO_ROOT / "docs" / "generated-results.md")
 
         assert_concepts(
@@ -245,7 +367,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
     def test_flow_review_does_not_overgrade_a_hidden_selected_record_example(
         self,
     ) -> None:
-        skill = read(FLOW_SKILL)
+        skill = read(FLOW_SKILL_ZH)
 
         self.assertIn("Function 已支持传入完整选中记录", skill)
         self.assertIn("不要据此直接判定主流程阻塞", skill)
@@ -253,7 +375,7 @@ class SplitReviewSkillsTest(unittest.TestCase):
         self.assertIn("无法把必需记录交给下游", skill)
 
     def test_source_review_does_not_claim_all_goal_completion(self) -> None:
-        skill = read(SOURCE_SKILL)
+        skill = read(SOURCE_SKILL_ZH)
 
         self.assertIn("不负责重新盘点完整主要目标", skill)
         self.assertIn("不负责从源码重新枚举全部主要目标", skill)
@@ -266,8 +388,8 @@ class SplitReviewSkillsTest(unittest.TestCase):
 
     def test_both_reviews_are_read_only_offline_and_lightweight(self) -> None:
         for name, path, agent_path in (
-            ("flow", FLOW_SKILL, FLOW_AGENT),
-            ("source", SOURCE_SKILL, SOURCE_AGENT),
+            ("flow", FLOW_SKILL_ZH, FLOW_AGENT),
+            ("source", SOURCE_SKILL_ZH, SOURCE_AGENT),
         ):
             with self.subTest(review=name):
                 skill = read(path)
@@ -290,11 +412,21 @@ class SplitReviewSkillsTest(unittest.TestCase):
                 "--skill code2skill-generate code2skill-review-flow code2skill-review-source",
                 document,
             )
-        self.assertIn("`code2skill-review-flow`: checks whether a user", readme)
-        self.assertIn("`code2skill-review-source`: reviews request fields", readme)
+        self.assertIn("skills/code2skill-review-flow/SKILL.md", readme)
+        self.assertIn("checks whether a user", readme)
+        self.assertIn("skills/code2skill-review-source/SKILL.md", readme)
+        self.assertIn("reviews request fields", readme)
         self.assertIn("Run the two review Skills independently", readme)
-        self.assertIn("`code2skill-review-flow`：检查用户能否通过主要流程", readme_zh)
-        self.assertIn("`code2skill-review-source`：深入检查请求字段", readme_zh)
+        self.assertIn(
+            "skills/code2skill-review-flow/references/SKILL.zh-CN.md",
+            readme_zh,
+        )
+        self.assertIn("检查用户能否通过主要流程", readme_zh)
+        self.assertIn(
+            "skills/code2skill-review-source/references/SKILL.zh-CN.md",
+            readme_zh,
+        )
+        self.assertIn("深入检查请求字段", readme_zh)
         self.assertIn("两个 Review Skill 按需独立使用", readme_zh)
         installation = read(REPO_ROOT / "docs" / "installation.md")
         self.assertIn("从 `code2skill` 更名为 `code2skill-generate`", installation)
@@ -319,7 +451,8 @@ class SplitReviewSkillsTest(unittest.TestCase):
             "最终产物无法可靠证明 Producer 实际读取了哪些源码文件",
             report,
         )
-        self.assertIn("(docs/evaluation.md)", readme)
+        self.assertIn("(docs/evaluation.en.md)", readme)
+        self.assertIn("(docs/evaluation.md)", readme_zh)
         for expected in (
             "| GPT-5.6 Sol（Ultra 模式） | 2026-07-24 | 47 分 45 秒 | **9.6** | **9.0** | **9.4** |",
             "| Kimi K3（Max 推理档位） | 2026-07-24 | 约 93 分钟 | **9.5** | **8.0** | **8.9** |",
@@ -375,10 +508,50 @@ class SplitReviewSkillsTest(unittest.TestCase):
         readme = read(REPO_ROOT / "README.md")
         readme_zh = read(REPO_ROOT / "README.zh-CN.md")
         expected_docs = {
-            "installation": REPO_ROOT / "docs" / "installation.md",
-            "generated results": REPO_ROOT / "docs" / "generated-results.md",
-            "advanced validation": REPO_ROOT / "docs" / "advanced-validation.md",
-            "evaluation": ANON_EVALUATION,
+            "installation": (
+                REPO_ROOT / "docs" / "installation.en.md",
+                REPO_ROOT / "docs" / "installation.md",
+            ),
+            "generated results": (
+                REPO_ROOT / "docs" / "generated-results.en.md",
+                REPO_ROOT / "docs" / "generated-results.md",
+            ),
+            "advanced validation": (
+                REPO_ROOT / "docs" / "advanced-validation.en.md",
+                REPO_ROOT / "docs" / "advanced-validation.md",
+            ),
+            "evaluation": (
+                REPO_ROOT / "docs" / "evaluation.en.md",
+                ANON_EVALUATION,
+            ),
+            "runtime-neutral design": (
+                REPO_ROOT
+                / "docs"
+                / "development"
+                / "runtime-neutral-generation-v1.md",
+                REPO_ROOT
+                / "docs"
+                / "development"
+                / "runtime-neutral-generation-v1.zh-CN.md",
+            ),
+            "workflow-aware design": (
+                REPO_ROOT
+                / "docs"
+                / "development"
+                / "workflow-aware-generation-v1.md",
+                REPO_ROOT
+                / "docs"
+                / "development"
+                / "workflow-aware-generation-v1.zh-CN.md",
+            ),
+            "DeepSeek Harness": (
+                REPO_ROOT / "docs" / "deepseek-harness.en.md",
+                REPO_ROOT / "docs" / "deepseek-harness.md",
+            ),
+            "documentation index": (
+                REPO_ROOT / "docs" / "README.en.md",
+                REPO_ROOT / "docs" / "README.md",
+            ),
         }
 
         self.assertLessEqual(
@@ -404,12 +577,50 @@ class SplitReviewSkillsTest(unittest.TestCase):
                 self.assertIn(concept, readme)
         self.assertIn("[简体中文](README.zh-CN.md)", readme)
         self.assertIn("[English](README.md)", readme_zh)
-        for label, path in expected_docs.items():
+        for label, (english_path, chinese_path) in expected_docs.items():
             with self.subTest(document=label):
-                self.assertTrue(path.is_file())
-                self.assertIn(f"(docs/{path.name})", readme)
+                self.assertTrue(english_path.is_file())
+                self.assertTrue(chinese_path.is_file())
+                english_link = english_path.relative_to(REPO_ROOT).as_posix()
+                chinese_link = chinese_path.relative_to(REPO_ROOT).as_posix()
+                self.assertIn(f"({english_link})", readme)
+                self.assertNotIn(f"({chinese_link})", readme)
+                self.assertIn(f"({chinese_link})", readme_zh)
+                self.assertNotIn(f"({english_link})", readme_zh)
 
-        installation = read(expected_docs["installation"])
+        report_templates = (
+            REPO_ROOT
+            / "skills"
+            / "code2skill-generate"
+            / "assets"
+            / "verification-report.md",
+            REPO_ROOT
+            / "skills"
+            / "code2skill-generate"
+            / "assets"
+            / "verification-report.zh-CN.md",
+        )
+        english_report, chinese_report = map(read, report_templates)
+        self.assertIn("Legacy human verification summary", english_report)
+        self.assertIn("旧版人工验证摘要", chinese_report)
+        self.assertIn(
+            "verification-report.md",
+            read(expected_docs["advanced validation"][0]),
+        )
+        self.assertIn(
+            "verification-report.zh-CN.md",
+            read(expected_docs["advanced validation"][1]),
+        )
+        self.assertEqual(
+            english_report.count("```"),
+            chinese_report.count("```"),
+        )
+        self.assertEqual(
+            len(re.findall(r"^##\s+", english_report, re.MULTILINE)),
+            len(re.findall(r"^##\s+", chinese_report, re.MULTILINE)),
+        )
+
+        installation = read(expected_docs["installation"][1])
         for concept in (
             "npx skills add",
             "只安装 Skill",
@@ -427,7 +638,9 @@ class SplitReviewSkillsTest(unittest.TestCase):
                 self.assertIn(concept, installation)
 
     def test_review_instructions_are_generic_not_fixture_specific(self) -> None:
-        combined = "\n".join((read(MAIN_SKILL), read(FLOW_SKILL), read(SOURCE_SKILL)))
+        combined = "\n".join(
+            (read(MAIN_SKILL_ZH), read(FLOW_SKILL_ZH), read(SOURCE_SKILL_ZH))
+        )
 
         for forbidden in (
             "HomeKing",

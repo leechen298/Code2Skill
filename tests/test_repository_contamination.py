@@ -160,9 +160,15 @@ class RepositoryContaminationTest(unittest.TestCase):
         context = (SKILL_ROOT / "assets" / "feature-context.md").read_text(
             encoding="utf-8"
         )
+        context_zh = (
+            SKILL_ROOT / "assets" / "feature-context.zh-CN.md"
+        ).read_text(encoding="utf-8")
         setup = (SKILL_ROOT / "assets" / "MCP-SETUP.md").read_text(
             encoding="utf-8"
         )
+        setup_zh = (
+            SKILL_ROOT / "assets" / "MCP-SETUP.zh-CN.md"
+        ).read_text(encoding="utf-8")
         report_schema = json.loads(
             (
                 SKILL_ROOT
@@ -182,18 +188,25 @@ class RepositoryContaminationTest(unittest.TestCase):
         self.assertNotIn("pageRoute", profile)
         self.assertFalse((SKILL_ROOT / "assets" / "PAGE.md").exists())
         self.assertIn("references/feature-context.md", context)
-        self.assertIn("证据 ID", context)
-        self.assertIn("来源 ID", context)
-        self.assertIn("可移植定位符", context)
+        self.assertIn("Evidence ID", context)
+        self.assertIn("Source ID", context)
+        self.assertIn("Portable locator", context)
+        self.assertIn("证据 ID", context_zh)
+        self.assertIn("来源 ID", context_zh)
+        self.assertIn("可移植定位符", context_zh)
         self.assertIn("npx skills add", setup)
-        self.assertIn("只安装 Skill", setup)
+        self.assertIn("installs only the Skill knowledge files", setup)
         self.assertIn("stdio", setup)
         self.assertIn("Streamable HTTP", setup)
-        self.assertIn("每个独立服务声明必需的基址环境变量", setup)
-        self.assertIn("不默认指向测试、预发或生产环境", setup)
-        self.assertIn("业务 API 基址不作为公共 Tool 参数", setup)
-        for topic in ("MCP 启动", "MCP 注册", "认证", "环境变量"):
+        self.assertIn("required base-URL environment variable for every independent service", setup)
+        self.assertIn("must not default to a test, staging, or production environment", setup)
+        self.assertIn("business API base URL as a public tool parameter", setup)
+        for topic in ("Start MCP", "Host Registration", "Authentication", "Environment Variables"):
             self.assertIn(topic, setup)
+        self.assertIn("只安装 Skill", setup_zh)
+        self.assertIn("每个独立服务声明必需的基址环境变量", setup_zh)
+        self.assertIn("不默认指向测试、预发或生产环境", setup_zh)
+        self.assertIn("业务 API 基址不作为公共 Tool 参数", setup_zh)
 
         runtime_check = report_schema["$defs"]["passedRuntimeCheck"]
         runtime_requirement = runtime_check["allOf"][1]["required"]

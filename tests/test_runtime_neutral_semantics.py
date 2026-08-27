@@ -15,7 +15,13 @@ from neutral_fixture_factory import (
 )
 
 
-MAIN_SKILL = REPO_ROOT / "skills" / "code2skill-generate" / "SKILL.md"
+MAIN_SKILL = (
+    REPO_ROOT
+    / "skills"
+    / "code2skill-generate"
+    / "references"
+    / "SKILL.zh-CN.md"
+)
 
 
 class RuntimeNeutralRuleTextTest(unittest.TestCase):

@@ -120,6 +120,8 @@ python3 skills/code2skill-generate/scripts/finalize_export.py \
 - bypass check 证明 `zeroExternalWrites: true`；
 - 未运行的 phase 明确写 `not-run`。
 
+需要先整理便于人工阅读的摘要时，可以使用中文的[旧版人工验证摘要模板](../skills/code2skill-generate/assets/verification-report.zh-CN.md)。它不能替代上述 JSON 执行证据。
+
 每个 Capability 只有拥有自己的匹配 live pair 才能成为 `runtime-verified`。一次只读调用不能批准整个包；无法安全调用时保持 `requires-review`。
 
 最终校验失败时，finalizer 恢复进入收口前的审计文件，不留下看似批准但无效的 receipt、matrix、approval 或 manifest。

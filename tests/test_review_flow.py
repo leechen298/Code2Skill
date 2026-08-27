@@ -4,7 +4,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REVIEW_FLOW_SKILL = (
-    REPO_ROOT / "skills" / "code2skill-review-flow" / "SKILL.md"
+    REPO_ROOT
+    / "skills"
+    / "code2skill-review-flow"
+    / "references"
+    / "SKILL.zh-CN.md"
 )
 
 

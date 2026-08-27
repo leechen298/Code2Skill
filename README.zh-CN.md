@@ -6,7 +6,7 @@
 
 Code2Skill 是一组可安装的 Agent Skills。它帮助编程 Agent 从用户授权的前端、后端或全栈代码中理解业务功能，并生成可供其他 Agent 使用的 Function、MCP Tools、业务 Skills 和离线测试。
 
-当前正式版本：[v1.1.3](https://github.com/leechen298/Code2Skill/releases/tag/v1.1.3)。
+当前正式版本：[v1.2.0](https://github.com/leechen298/Code2Skill/releases/tag/v1.2.0)。
 
 ```text
 现有代码
@@ -44,18 +44,18 @@ npx skills add leechen298/Code2Skill \
   --yes
 ```
 
-- `code2skill-generate`：生成 Function、MCP、业务 Skill 和离线测试。
-- `code2skill-review-flow`：检查用户能否通过主要流程完成目标。
-- `code2skill-review-source`：深入检查请求字段、转换和调用链是否符合源码。
+- [`code2skill-generate`](skills/code2skill-generate/references/SKILL.zh-CN.md)：生成 Function、MCP、业务 Skill 和离线测试。
+- [`code2skill-review-flow`](skills/code2skill-review-flow/references/SKILL.zh-CN.md)：检查用户能否通过主要流程完成目标。
+- [`code2skill-review-source`](skills/code2skill-review-source/references/SKILL.zh-CN.md)：深入检查请求字段、转换和调用链是否符合源码。
 
-日常生成只需要 `code2skill-generate`，两个 Review Skill 按需独立使用。旧版本迁移、生成结果的依赖安装和 MCP 注册见[安装说明](docs/installation.md)。
+日常生成只需要 `code2skill-generate`，两个 Review Skill 按需独立使用。三个 Skill 的执行说明和默认生成文档模板均提供中英文版本，面向用户的产物跟随请求语言。可选的旧版 `strict-export-v1` 兼容模式仍输出 `zh-CN` 文档。旧版本迁移、生成结果的依赖安装和 MCP 注册见[安装说明](docs/installation.md)。
 
 ### DeepSeek Harness
 
 DeepSeek Harness 用户可以把三个 Skill 作为 Bundle 安装到指定 profile：
 
 ```bash
-dsh plugin --profile web add github:leechen298/Code2Skill#v1.1.3
+dsh plugin --profile web add github:leechen298/Code2Skill#v1.2.0
 ```
 
 安装、验证、headless profile 和卸载说明见 [DeepSeek Harness 集成文档](docs/deepseek-harness.md)。生成后的业务 MCP 仍按各产物的 `MCP-SETUP.md` 单独注册。
@@ -119,6 +119,7 @@ generated/code2skill/<feature-id>/
 - [安装 Skill、生成结果依赖与注册 MCP](docs/installation.md)
 - [生成结果的结构和设计原则](docs/generated-results.md)
 - [调用方式与语言中立化迭代设计](docs/development/runtime-neutral-generation-v1.zh-CN.md)
+- [业务工作流识别与 Tool 拆分设计](docs/development/workflow-aware-generation-v1.zh-CN.md)
 - [可选的高级验证流程](docs/advanced-validation.md)
 - [生成模型、评分方法与匿名评估结果](docs/evaluation.md)
 - [完整文档索引](docs/README.md)

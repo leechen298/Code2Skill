@@ -6,7 +6,7 @@ English | [简体中文](README.zh-CN.md)
 
 Code2Skill is a collection of installable Agent Skills that helps coding agents understand business functionality in user-authorized frontend, backend, or full-stack source code, then generate Functions, MCP tools, workflow Skills, and offline tests for other agents to use.
 
-Current release: [v1.1.3](https://github.com/leechen298/Code2Skill/releases/tag/v1.1.3).
+Current release: [v1.2.0](https://github.com/leechen298/Code2Skill/releases/tag/v1.2.0).
 
 ```text
 Existing application code
@@ -44,21 +44,21 @@ npx skills add leechen298/Code2Skill \
   --yes
 ```
 
-- `code2skill-generate`: generates Functions, MCP tools, workflow Skills, and offline tests.
-- `code2skill-review-flow`: checks whether a user can complete the main goals through the generated workflows.
-- `code2skill-review-source`: reviews request fields, transformations, and invocation chains against the authorized source code.
+- [`code2skill-generate`](skills/code2skill-generate/SKILL.md): generates Functions, MCP tools, workflow Skills, and offline tests.
+- [`code2skill-review-flow`](skills/code2skill-review-flow/SKILL.md): checks whether a user can complete the main goals through the generated workflows.
+- [`code2skill-review-source`](skills/code2skill-review-source/SKILL.md): reviews request fields, transformations, and invocation chains against the authorized source code.
 
-Routine generation only requires `code2skill-generate`. Run the two review Skills independently when needed. See the [installation guide](docs/installation.md) for migration from older versions, generated-package dependencies, and MCP registration. The detailed documentation is currently written in Chinese.
+Routine generation only requires `code2skill-generate`. Run the two review Skills independently when needed. The three Skill instructions and default generated-document templates are available in English and Chinese; user-facing output follows the language of the request. The optional legacy `strict-export-v1` compatibility mode still emits `zh-CN` documentation. See the [installation guide](docs/installation.en.md) for migration from older versions, generated-package dependencies, and MCP registration.
 
 ### DeepSeek Harness
 
 DeepSeek Harness users can install the three Skills as a Bundle in a selected profile:
 
 ```bash
-dsh plugin --profile web add github:leechen298/Code2Skill#v1.1.3
+dsh plugin --profile web add github:leechen298/Code2Skill#v1.2.0
 ```
 
-See the [DeepSeek Harness integration guide](docs/deepseek-harness.md) for installation, verification, headless profiles, and removal. Generated business MCP servers must still be registered separately according to their own `MCP-SETUP.md` files.
+See the [DeepSeek Harness integration guide](docs/deepseek-harness.en.md) for installation, verification, headless profiles, and removal. Generated business MCP servers must still be registered separately according to their own `MCP-SETUP.md` files.
 
 ## Usage Boundaries
 
@@ -115,15 +115,16 @@ Three runs against the same anonymized, multi-goal source package:
 | Kimi K3 (Max reasoning) | 2026-07-24 | about 93m | **8.9** |
 | GPT-5.6 Sol (High) | 2026-07-24 | 20m 29s | **8.4** |
 
-Timing ends when generation and that run's offline validation finish; it excludes later scoring, directory cleanup, installation, and deployment. See the [evaluation report](docs/evaluation.md) for the two scoring systems, methodology, and privacy boundaries. The report is currently written in Chinese.
+Timing ends when generation and that run's offline validation finish; it excludes later scoring, directory cleanup, installation, and deployment. See the [evaluation report](docs/evaluation.en.md) for the two scoring systems, methodology, and privacy boundaries.
 
 ## Documentation
 
-- [Install Skills, generated dependencies, and MCP servers](docs/installation.md) (Chinese)
-- [Generated package structure and design principles](docs/generated-results.md) (Chinese)
-- [Runtime-neutral generation design](docs/development/runtime-neutral-generation-v1.zh-CN.md) (Chinese)
-- [Optional advanced validation](docs/advanced-validation.md) (Chinese)
-- [Models, scoring, and anonymized evaluation results](docs/evaluation.md) (Chinese)
-- [Full documentation index](docs/README.md) (Chinese)
+- [Install Skills, generated dependencies, and MCP servers](docs/installation.en.md)
+- [Generated package structure and design principles](docs/generated-results.en.md)
+- [Runtime-neutral generation design](docs/development/runtime-neutral-generation-v1.md)
+- [Workflow-aware generation design](docs/development/workflow-aware-generation-v1.md)
+- [Optional advanced validation](docs/advanced-validation.en.md)
+- [Models, scoring, and anonymized evaluation results](docs/evaluation.en.md)
+- [Full documentation index](docs/README.en.md)
 
 The Skills follow the [Agent Skills specification](https://agentskills.io/specification) and use [vercel-labs/skills](https://github.com/vercel-labs/skills) for installation. Generated MCP servers use standard stdio or Streamable HTTP transport.

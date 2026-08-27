@@ -1,30 +1,30 @@
-# <feature name> 的 Skill 安装与 MCP 连接
+# Skill Installation and MCP Connection for <feature name>
 
-> 这是 vNext 模板。生成时用实际 `<feature-id>`、包路径、环境变量和认证边界替换占位符，并删除本说明。不要写入真实密钥或特定 Host 的私有配置格式。
+> This is a vNext template. During generation, replace placeholders with the actual `<feature-id>`, package path, environment variables, and authentication boundaries, then remove this note. Do not write real secrets or private configuration formats of a specific Host.
 
-## Skill 安装
+## Install the Skill
 
 ```bash
 npx skills add ./generated/code2skill/<feature-id> -a <agent-id> -g -y
 ```
 
-这个命令只安装 Skill 知识文件。它不会启动或注册 MCP，不会注入认证信息，也不能证明 Function、MCP 或真实业务环境已经可用。
+This command installs only the Skill knowledge files. It does not start or register MCP, inject authentication information, or prove that the Function, MCP, or live business environment is available.
 
-## MCP 启动
+## Start MCP
 
-使用生成包的绝对路径启动 stdio MCP Server：
+Use the generated package's absolute path to start the stdio MCP server:
 
 ```bash
 node <absolute-package-path>/mcp-tool/index.mjs
 ```
 
-<如果 Runtime Profile 不是 Node/stdio，改为 `export-profile.json` 证明的实际启动方式。>
+<When the Runtime Profile is not Node/stdio, replace this with the actual startup method proven by `export-profile.json`.>
 
-stdio 与 Streamable HTTP 是 MCP 标准传输。本模板的 `node-stdio` Runtime Profile 使用本地 stdio；只有包已被独立部署为远程服务时，才改用 Consumer Host 的 Streamable HTTP 注册入口。
+stdio and Streamable HTTP are standard MCP transports. This template's `node-stdio` Runtime Profile uses local stdio. Use the Consumer Host's Streamable HTTP registration interface only when the package has already been independently deployed as a remote service.
 
-## Host 注册参数
+## Host Registration Parameters
 
-将下列中立参数映射到 Consumer Host 支持的 MCP 注册方式：
+Map the following runtime-neutral parameters to an MCP registration method supported by the Consumer Host:
 
 ```json
 {
@@ -37,34 +37,34 @@ stdio 与 Streamable HTTP 是 MCP 标准传输。本模板的 `node-stdio` Runti
 }
 ```
 
-Code2Skill 只提供这些通用运行参数，不生成聊天通道、文件接收/下载或特定平台的私有适配器。部分 Host 使用 `mcpServers` 包裹这些字段，但那是 Host 配置惯例，不是 MCP 协议要求。
+Code2Skill provides only these generic runtime parameters. It does not generate private adapters for chat channels, file reception/download, or a specific platform. Some Hosts wrap these fields in `mcpServers`, but that is a Host configuration convention, not an MCP protocol requirement.
 
-## 环境变量与认证
+## Environment Variables and Authentication
 
-- `<DRY_RUN_VARIABLE>`：仅在值为 `1` 时进入 dry-run，不得产生外部副作用。
-- `<SOURCE_PROVEN_VARIABLE>`：<说明来源、用途、必填性与不得记录的敏感边界。>
-- 调用业务 API 时，为每个独立服务声明必需的基址环境变量。运行地址由部署 Host 显式注入，Function 不默认指向测试、预发或生产环境；缺少基址时在网络请求前停止。
-- 业务 API 基址不作为公共 Tool 参数。源码中发现的环境地址可以作为部署参考，但不能成为运行默认值。
-- 认证与用户/租户身份由部署 Host 或目标应用支持的认证边界注入。不得把 token、cookie、密钥或会话值写入 `SKILL.md`、`references/feature-context.md`、manifest 或示例命令。
-- 每个 MCP Tool handler 的第二个参数是运行时提供的可信 `runtimeContext`。生成回调只能把 `(input, runtimeContext)` 原样交给对应 Function，不能从公开 Tool 参数构造身份、Guard、确认、会话、dispatcher 或 protected state。若部署运行时不能提供 Capability 声明的上下文设施，该能力必须禁用或保持 `requires-host-integration`。
-- 若 `consumer-requirements.json` 声明 `attachment-resolution`，部署必须提供把不透明 Host 授权引用解析为受控内容或流的通用设施；业务上传 Tool 使用该结果，但本包不实现消息接入、附件接收或下载适配器。缺少该设施时，附件相关能力保持 `requires-host-integration`。
+- `<DRY_RUN_VARIABLE>`: Enters dry-run only when set to `1`; it must not cause external side effects.
+- `<SOURCE_PROVEN_VARIABLE>`: <Describe its provenance, purpose, whether it is required, and the sensitive-data boundary that prohibits recording it.>
+- When calling business APIs, declare a required base-URL environment variable for every independent service. The deployment Host explicitly injects the runtime address. The Function must not default to a test, staging, or production environment, and must stop before a network request when the base URL is missing.
+- Do not expose a business API base URL as a public tool parameter. Environment addresses found in source code may be deployment references but must not become runtime defaults.
+- The deployment Host or a supported authentication boundary in the target application injects authentication and user/tenant identity. Do not write tokens, cookies, secrets, or session values into `SKILL.md`, `references/feature-context.md`, a manifest, or example commands.
+- The second parameter of every MCP tool handler is a trusted `runtimeContext` provided at runtime. Generated callbacks may only pass `(input, runtimeContext)` unchanged to the corresponding Function. They must not construct identity, Guards, confirmation, session, dispatcher, or protected state from public tool parameters. If the deployment runtime cannot provide the context facilities declared by the Capability, disable that capability or keep it `requires-host-integration`.
+- If `consumer-requirements.json` declares `attachment-resolution`, the deployment must provide a generic facility that resolves opaque, Host-authorized references into controlled content or streams. Business upload tools use the resolved result, but this package does not implement message integration, attachment reception, or download adapters. Without that facility, attachment-related capabilities remain `requires-host-integration`.
 
-## 连通验证
+## Connectivity Validation
 
-1. 确认 MCP 进程能从独立复制的生成包启动。
-2. 使用 MCP client 完成 `initialize`。
-3. 调用 `tools/list`，核对 Tool 名称、Schema 与 Canonical Contract 一致。
-4. 在安全 mock/测试边界为每个 Tool 提供一条符合输出 Schema 的成功用例和一条进入 handler 的结构化错误用例；handler 使用审阅过的 `portable-error-normalizer.mjs`，成功直接投影 Function 结果，失败保留 `code/message/details/retryable`，未知写入结果始终不可自动重试。在 `<DRY_RUN_VARIABLE>=1` 下覆盖每个写 Tool，核对完整 policy、原始已验证输入以及 `content`/`structuredContent`。另用可计数的 dispatcher 行为测试证明 dry-run 与 Guard 拒绝路径为零外部副作用。
-5. 只对当前部署已授权且安全的能力执行真实 `tools/call`，并按 Capability 分别保留证据。无法安全调用的写能力保持未验证，不得为了探针而操作生产数据。
+1. Confirm that the MCP process can start from an independently copied generated package.
+2. Use an MCP client to complete `initialize`.
+3. Call `tools/list` and verify that tool names and Schemas match the Canonical Contract.
+4. Within a safe mock/test boundary, provide each tool with one successful case that conforms to its output Schema and one structured-error case that enters its handler. The handler uses the reviewed `portable-error-normalizer.mjs`: success directly projects the Function result; failure preserves `code/message/details/retryable`; an unknown write result is never automatically retried. Under `<DRY_RUN_VARIABLE>=1`, cover every write tool and verify the complete policy, original validated input, and `content`/`structuredContent`. Also use a countable dispatcher behavioral test to prove that dry-run and Guard-rejection paths have zero external side effects.
+5. Execute live `tools/call` only for capabilities that are authorized and safe in the current deployment, preserving evidence separately for each Capability. A write capability that cannot be called safely remains unverified and must not manipulate production data merely as a probe.
 
-## 状态边界
+## Status Boundaries
 
-- **Skill 已安装**：Host 的 Skill discovery 能找到知识文件。
-- **MCP 已注册**：Host 已保存正确的 command/args/cwd/env 配置。
-- **MCP 已连通**：`initialize` 和 `tools/list` 已通过。
-- **行为已验证**：对应 Capability 的确定性测试已通过。
-- **运行时已验证**：对应 Capability 拥有自己的真实 MCP 调用证据。
-- **Host 已验证**：所需认证、确认、会话、附件或未知结果能力已按 `host-profile.json` 核对。
-- **已部署**：独立的交付动作成功。
+- **Skill installed**: The Host's Skill discovery can find the knowledge files.
+- **MCP registered**: The Host has saved the correct command/args/cwd/env configuration.
+- **MCP connected**: `initialize` and `tools/list` have succeeded.
+- **Behavior verified**: Deterministic tests for the corresponding Capability have passed.
+- **Runtime verified**: The corresponding Capability has its own live MCP call evidence.
+- **Host verified**: Required authentication, confirmation, session, attachment, or unknown-result capabilities have been checked against `host-profile.json`.
+- **Deployed**: A separate delivery action has succeeded.
 
-上述状态必须分别报告，不得由前一项推导后一项。
+Report these states separately. Do not infer a later state from an earlier one.

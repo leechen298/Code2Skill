@@ -1,185 +1,191 @@
 ---
 name: code2skill-generate
-description: 从已有前端、后端或全栈代码中提取业务功能，生成可运行、可安装的 Function、MCP 和 Agent Skill；适用于页面功能、接口功能、业务流程及已有生成结果的修正。
+description: Generate runnable, installable Functions, MCP tools, and Agent Skills from authorized frontend, backend, or full-stack code, including page features, interfaces, workflows, and fixes to existing generated packages；从已有前端、后端或全栈代码中提取业务功能，生成可运行、可安装的 Function、MCP 和 Agent Skill，适用于页面功能、接口功能、业务流程及已有生成结果的修正。
 ---
 
 # Code2Skill
 
-把已有应用的业务能力转为其他 Agent 可用 Function、MCP Tools 和 Skill。默认目标是生成一份小而可靠的运行包，不是为源码制作审计档案。
+Complete Chinese version: [SKILL.zh-CN.md](references/SKILL.zh-CN.md).
 
-使用当前编程 Agent 搜索、理解和修改用户授权的代码；不要另建扫描器。生成包的 Consumer 可能不是当前 Agent，不得假设它能读取原仓库、Producer 机器文件或会话状态；Consumer Host 显式交给 Tool 的受控附件路径或附件引用除外。
+Use the user's language for the final response, generated Skills, and user-facing documentation. When no language is explicitly requested, follow the language of the user's current request.
 
-## 默认生成结果
+Turn the business capabilities of an existing application into Functions, MCP tools, and Skills that other agents can use. The default goal is a small, reliable runtime package, not an audit archive of the source code.
 
-除非用户明确要求严格审计，默认只生成：
+Use the current coding agent to search, understand, and modify user-authorized code; do not build a separate scanner. The Consumer of the generated package may not be the current agent. Do not assume that it can read the original repository, files on the Producer machine, or session state, except for controlled attachment paths or attachment references explicitly passed to a tool by the Consumer Host.
+
+## Default Generated Result
+
+Unless the user explicitly requests a strict audit, generate only:
 
 ```text
 generated/code2skill/<feature-id>/
-├── SKILL.md                    # 只有一个主要目标时使用
-├── skills/                     # 有多个主要目标时替代根 SKILL.md
+├── SKILL.md                    # Used when there is only one primary goal
+├── skills/                     # Replaces the root SKILL.md when there are multiple primary goals
 │   ├── <goal-a>/SKILL.md
 │   └── <goal-b>/SKILL.md
 ├── MCP-SETUP.md
-├── package.json              # 当前 node-stdio profile 示例：包信息、运行脚本和依赖
+├── package.json              # Current node-stdio profile example: package metadata, runtime scripts, and dependencies
 ├── function-core/
-│   └── index.mjs             # 当前 node-stdio profile 示例
+│   └── index.mjs             # Current node-stdio profile example
 ├── mcp-tool/
-│   └── index.mjs             # 当前 node-stdio profile 示例
-├── portable-agent-result.mjs # node-stdio profile 通用结果投影辅助库（readHttpResponse/httpResultFromError 仅 HTTP 使用）
+│   └── index.mjs             # Current node-stdio profile example
+├── portable-agent-result.mjs # Generic result projection helper for node-stdio (readHttpResponse/httpResultFromError are HTTP-only)
 ├── tests/
-│   └── *.test.mjs            # 当前 node-stdio profile 示例
+│   └── *.test.mjs            # Current node-stdio profile example
 └── references/
-    └── feature-context.md     # 仅在业务背景无法简洁写入 SKILL 时生成
+    └── feature-context.md     # Generated only when business context cannot be kept concise in the Skill
 ```
 
-默认产物组成不变，扩展名、依赖、启动方式随 runtime profile；`core-export-v1` 由 `node-stdio` 实现。
+The default artifact composition remains the same, while extensions, dependencies, and startup methods follow the runtime profile. `core-export-v1` is implemented by `node-stdio`.
 
-根 `SKILL.md` 与 `skills/*/SKILL.md` 二选一。用户指定的页面或目录只是搜索范围：先识别其中可独立完成的主要用户目标。单目标生成根 Skill；多目标分别生成独立 Skill，共享同套原子 Function/MCP。不要按接口数量拆 Skill，也不用一个大 Skill 覆盖互不相同目标。
+Use either a root `SKILL.md` or `skills/*/SKILL.md`, never both. A page or directory specified by the user is only the search scope: first identify the primary user goals within it that can be completed independently. Generate a root Skill for one goal; for multiple goals, generate an independent Skill for each and share the same set of atomic Functions and MCP tools. Do not split Skills by interface count or use one large Skill to cover unrelated goals.
 
-多个目标使用 `skills/<goal-id>/SKILL.md` 时，参考资料放对应 Skill 的 `references/` 中；不要让已安装 Skill 依赖父目录文件。根 `references/feature-context.md` 只适用于单一根 Skill。
+When multiple goals use `skills/<goal-id>/SKILL.md`, place references under the corresponding Skill's `references/` directory. Do not make an installed Skill depend on files in its parent directory. The root `references/feature-context.md` applies only to a single root Skill.
 
-不要在默认包中生成 Canonical/Goal Contract、Capability Graph、Host Profile、Verification Matrix、manifest、Hash 收据等审计文件、MCP 长文档或 live receipt。临时分析笔记/测试输出不进入交付包。
+Do not generate Canonical/Goal Contracts, Capability Graphs, Host Profiles, Verification Matrices, manifests, hash receipts, other audit files, long MCP documentation, or live receipts in the default package. Temporary analysis notes and test output do not belong in the delivered package.
 
-代码是后续维护依据：Function 是业务执行真相，MCP 是标准适配层，Skill 是 Agent 使用知识。避免用多份 JSON/长文档重复描述同一事实。
+Code is the maintenance source of truth: Functions are the truth of business execution, MCP is the standard adapter layer, and Skills are the agent's usage knowledge. Avoid describing the same fact repeatedly in multiple JSON files or long documents.
 
-## 默认工作流程
+## Default Workflow
 
-### 1. 确定范围
+### 1. Define the Scope
 
-- 从用户指定的页面、目录、接口、路由、符号或功能目标开始。
-- 只搜索用户明确授权的源码根；不要扫描整台机器。未显式限定时沿同仓库直接 import/alias 追踪闭合依赖；跨仓库或“仅限这些根”不越界。缺失依赖记录符号/文件，不据此过早声明缺失。
-- 把指定范围视为发现边界，先列出其中可独立触发、引导和完成的主要用户目标；它可能产生一个或多个 Skill。
-- Skill 的单位是主要用户目标，不是目录、文件、接口或输入框。
-- 先读取目标仓库规则和已有测试。
+- Start from the page, directory, interface, route, symbol, or functional goal specified by the user.
+- Search only source roots explicitly authorized by the user; do not scan the entire machine. When the user has not explicitly limited the scope, follow direct imports and aliases within the same repository to close dependencies. Do not cross repository boundaries or a constraint such as “only these roots.” Record the missing symbol or file for unavailable dependencies; do not prematurely declare the capability missing on that basis.
+- Treat the specified scope as a discovery boundary. First list the primary user goals within it that can be independently triggered, guided, and completed; this may produce one or more Skills.
+- The unit of a Skill is a primary user goal, not a directory, file, interface, or input field.
+- Read the target repository's rules and existing tests first.
 
-### 2. 目标决策边界
+### 2. Identify Goal Decision Boundaries
 
-Producer 先在**工作记忆**中形成每目标最小临时图：用户目标 → 已知/缺失信息 → 查询/选择/校验 → 分支与停止条件 → 写入前展示/确认 → 写入 → 源码存在时的结果查询/对账。纯只读无写入节点；无源码证据不虚构。
+For each goal, the Producer first forms a minimal temporary graph in **working memory**: user goal → known/missing information → query/selection/validation → branches and stopping conditions → pre-write presentation/confirmation → write → result query/reconciliation when present in source. A purely read-only goal has no write node. Do not invent anything without source evidence.
 
-节点角色（每节点恰一个）＝Agent 判断/追问/选择｜用户交互/确认｜可独立命名/调用/复用/停止的 MCP Tool｜Function 内部确定性步骤｜完成/停止/无法确认的结果边界。约束所有者（可叠加）＝后端权威｜Consumer Host 策略｜源码证明不可绕过的确定性 Guard。一个写入 Tool 可同时携带 Host 确认与 Guard，不得二选一。Guard 证据门槛见「设计能力」节；只存工作记忆，不生成中间文件、不进交付包。
+Each node has exactly one primary role: agent judgment/question/selection | user interaction/confirmation | an independently nameable, callable, reusable, or stoppable MCP tool | a deterministic step inside a Function | a result boundary of completed/stopped/unconfirmed. Constraint owners, which may overlap, are: backend authority | Consumer Host policy | a deterministic Guard proven by source to be non-bypassable. A write tool may carry both Host confirmation and a Guard; do not choose only one. See “Design Capabilities” for the Guard evidence threshold. Keep this graph only in working memory; do not generate an intermediate file or include it in the delivered package.
 
-### 3. 从真实调用入口确定能力面
+### 3. Determine the Capability Surface from Real Invocation Points
 
-源码中真实存在的业务调用入口是 Function/MCP 候选面。有客户端或 Consumer 时沿其调用链追踪；无客户端时从用户指定且源码证明可调用的公开 API、RPC、Service、消息或任务入口开始。只引入影响这些入口的逻辑：
+Business invocation points that actually exist in source code define the Function/MCP candidate surface. When a client or Consumer exists, follow its call chain. Without a client, start from a user-specified public API, RPC, Service, message, or task entry point that source code proves callable. Include only logic that affects those entry points:
 
-- 调用目标与操作（HTTP：method/URL/query/header/body/multipart；RPC：service/method/arguments；消息/任务：destination/key/payload；应用内 Service：方法与运行上下文）；
-- 调用方真正使用的响应字段、返回值、回执或任务 ID；
-- 默认值、转换、动态选项、条件输入和错误处理；
-- 用户目标、主要分支、停止点和提交前展示信息；
-- 附件上传结果如何绑定后续调用。
+- Invocation target and operation (HTTP: method/URL/query/header/body/multipart; RPC: service/method/arguments; message/task: destination/key/payload; in-process Service: method and runtime context).
+- Response fields, return values, receipts, or task IDs that the caller actually uses.
+- Defaults, transformations, dynamic options, conditional inputs, and error handling.
+- User goals, primary branches, stopping points, and information presented before submission.
+- How attachment upload results bind to later calls.
 
-不要因后端存在内部方法、任意 public 方法、Repository、消息消费者或定时任务就自动暴露 Tool，也不要把页面/请求/控件/输入框机械变 Tool。
+Do not automatically expose a tool merely because the backend contains an internal method, arbitrary public method, Repository, message consumer, or scheduled task. Do not mechanically turn a page, request, control, or input field into a tool.
 
-页面写死的菜单、文案/配置优先写入 Skill 或可选 Feature Context。仅当本地数据可独立满足用户目标、需被多个能力复用，或需运行时读取时，才生成 Tool。
+Prefer putting hard-coded page menus, copy, and configuration into the Skill or optional Feature Context. Generate a tool for local data only when that data can independently satisfy a user goal, must be reused by multiple capabilities, or must be read at runtime.
 
-### 4. 有限核对传输契约
+### 4. Perform a Bounded Transport-Contract Check
 
-后端、协议或测试源码默认仅补齐公开传输契约：Request/Response、接口定义、Service 方法签名、消息/任务契约的结构与可空性；鉴权/身份边界/运行时上下文注入点；统一响应信封及公开的 `code`/`message`/`data` 等字段；明确公开的枚举及附件上传接口。合同足够生成时停止，不默认追踪 Service/持久化/消息/审批/下游 RPC/完整副作用/全部业务校验。
+By default, use backend, protocol, or test source only to complete the public transport contract: the structure and nullability of Request/Response types, interface definitions, Service method signatures, and message/task contracts; authentication, identity boundaries, and runtime-context injection points; common response envelopes and public fields such as `code`, `message`, and `data`; explicitly public enums and attachment upload interfaces. Stop when the contract is sufficient for generation. Do not trace Service, persistence, messages, approvals, downstream RPC, the complete side-effect graph, or every business validation by default.
 
-仅以下情况才继续深入：公开契约互相矛盾；操作具有明显金融/删除/发布/高风险影响；源码明确存在不可绕过的安全凭证/顺序；或用户明确要求深度审计。
+Continue deeper only when public contracts contradict one another; the operation has clear financial, deletion, publication, or other high-risk effects; source code explicitly contains a non-bypassable security credential or ordering constraint; or the user explicitly requests a deep audit.
 
-普通业务是否接受调用，以真实后端调用入口为权威。不要在 Function 中复制整套后端规则或预判 HTTP 状态/业务字段。把后端响应或调用结果交给 Consumer Agent，由它判断、修正调用、补问或解释结果。
+The real backend invocation point is authoritative for whether an ordinary business call is accepted. Do not copy the entire backend rule set into a Function or predict success from HTTP status or business fields. Pass the backend response or invocation result to the Consumer Agent so it can judge the result, correct the call, ask for missing information, or explain the outcome.
 
-### 5. 设计能力
+### 5. Design Capabilities
 
-Tool 应表达可独立命名、调用、复用或停止的业务能力。按业务意义、输入输出稳定性/副作用拆分，而非按代码文件/HTTP 数量拆分。
+A tool should express a business capability that can be independently named, called, reused, or stopped. Split by business meaning, input/output stability, and side effects—not by source file or HTTP call count.
 
-拆出额外 Tool 的正面条件（满足一项即可）：中间结果改变后续调用/分支/参数；能独立完成部分目标或被复用；前后步骤权限/副作用/确认要求不同；中间阶段可停止/等待用户输入；写入后有源码证明的异步状态查询或对账。不拆 Tool 反面条件：仅为让模型多推理；请求组装/字段格式化/RAG 等确定性实现；无论中间结果下一步始终相同；拆开暴露无意义中间状态；多调用属不可分割事务。
+Positive conditions for an additional tool, any one of which is sufficient: an intermediate result changes a later call, branch, or parameter; the capability can independently complete part of the goal or be reused; the steps before and after it have different permission, side-effect, or confirmation requirements; the intermediate stage may stop or wait for user input; or source proves an asynchronous status query or reconciliation after a write. Negative conditions against splitting: only to make the model reason more often; deterministic implementation such as request assembly, field formatting, or RAG; the next step is always the same regardless of the intermediate result; splitting exposes meaningless intermediate state; or multiple calls form an indivisible transaction.
 
-一个 Tool 可调多个内部 API，一个 API 可支持多个业务 Tool，勿按接口数量机械映射。仅主要角色为 MCP Tool 的节点才拆为 Tool；不得把 Agent 判断/追问、用户确认或 Function 内部确定性步骤改名凑拆分。
+One tool may call multiple internal APIs, and one API may support multiple business tools. Do not map mechanically by interface count. Split only nodes whose primary role is MCP tool. Do not rename agent judgment/questions, user confirmation, or deterministic Function-internal steps merely to force a split.
 
-对每能力只确定最小契约：稳定 operation identity（Tool 名、标题、调用目标、操作标识、版本/路由键）；公共输入到真实调用字段映射；已知参数名称、来源、用途及类型/顺序/序列化；下游 handoff 与下一步判断需要的响应字段/回执/任务 ID；绑定（HTTP：method/URL/query/header/body/multipart；RPC：service/method/arguments；消息/任务：destination/key/payload；应用内 Service：方法与运行上下文）；read/create/update/delete 副作用；认证、运行上下文与附件条件。routing/version/context、结果/异常/超时/重试边界由源码证明并由 Function 稳定还原。
+For each capability, define only the minimal contract: a stable operation identity (tool name, title, invocation target, operation identifier, version/routing key); mapping from public inputs to real invocation fields; known parameter names, provenance, purpose, type/order/serialization; response fields, receipts, or task IDs required for downstream handoff and the next decision; binding (HTTP: method/URL/query/header/body/multipart; RPC: service/method/arguments; message/task: destination/key/payload; in-process Service: method and runtime context); read/create/update/delete side effects; and authentication, runtime-context, and attachment requirements. Routing/version/context and result/error/timeout/retry boundaries must be proven by source and reproduced consistently by the Function.
 
-HTTP 场景下，业务 API 基址属部署配置、非用户业务输入；其他场景下同类概念称「业务服务接入配置」。按独立服务声明环境变量，例如 HTTP 场景下 `CODE2SKILL_<FEATURE>_<SERVICE>_BASE_URL`；不得把基址公开成 Tool 参数，也不得把接入配置公开成参数，也不得把源码中测试/预发/生产域名或固定地址作默认值。源码证明的环境地址可在 `MCP-SETUP.md` 作部署参考，实际运行由 Consumer Host 显式注入。调用结果或后端响应动态给出的对象存储/回调/预签名地址不属于静态基址。
+In HTTP scenarios, the business API base URL is deployment configuration, not user business input. In other scenarios, refer to the equivalent concept as “business service connection configuration.” Declare environment variables per independent service, for example `CODE2SKILL_<FEATURE>_<SERVICE>_BASE_URL` in HTTP scenarios. Do not expose a base URL or any connection configuration as a tool parameter, and do not use source test, staging, production, or fixed addresses as defaults. Source-proven environment addresses may appear in `MCP-SETUP.md` as deployment references; the Consumer Host must inject the actual runtime value explicitly. Object-storage, callback, or presigned URLs dynamically returned by an invocation result or backend response are not static base URLs.
 
-不要仅凭字段名判断语义；同名字段追踪来源、赋值与用途，语义不同用真实用途公共名并内部映射。对每个写能力及「查询→选择→后续调用」链做 source-binding：沿上游响应→调用方归一化→各下游 wire 追踪；同一上游值进多下游调用须逐点追踪「原始值→归一化值→各下游 wire」，不因语义相近或共用 Tool 复用表示；源码改写后的上游值须追踪归一化本身与各下游使用的归一化结果，不把原始表示当下游可用值。
+Do not infer semantics from field names alone. For same-name fields, trace provenance, assignment, and purpose. When their meanings differ, use public names that reflect the real purpose and map them internally to the actual invocation fields. Perform source binding for every write capability and every “query → selection → later invocation” chain: trace upstream response → caller normalization → each downstream wire representation. When one upstream value enters multiple downstream calls, independently trace “raw value → normalized value → each downstream wire” at every use site. Do not reuse one representation merely because semantics appear similar or a tool is shared. When source rewrites an upstream value, trace the normalization itself and the normalized result at every downstream use; do not treat the raw representation as usable downstream.
 
-客户端若将选中结果的多个字段或整行对象展开、合并进下游请求，建模为选中记录交接。下游只读少数字段时逐项公开；转发整行时使用业务命名的开放对象（如 `selectedOrder`）。Function 按源码顺序合并且保持显式覆盖关系。除非证据证明只传标识符等价，Skill 的标准示例必须传递该记录；省略能否接受仍交给后端判断。
+When the client expands or merges multiple fields—or an entire row object—from a selected result into a later request, model it as selected-record handoff. If the downstream call reads only a few fields, expose them individually. If it forwards the entire row, use a business-named open object such as `selectedOrder`. The Function must merge in source order and preserve explicit override relationships. Unless evidence proves that passing only an identifier is equivalent, the Skill's standard example must pass the record; whether omitting it is accepted remains for the backend to decide.
 
-MCP 必须声明输入 Schema，但默认是给 Agent 的参数说明，非业务拦截器。使用开放对象；已知业务字段优先用带说明的 `unknown().optional()`，不默认生成枚举/格式/范围/条件必填/严格类型。仅缺某值无法形成 URL/附件等传输结构时，才保留最低传输约束。接受额外参数，不设置 `additionalProperties: false` 或 strict object。Function 只按源码证明的绑定组装请求，不得用更窄 Schema/类型/本地规则阻止调用；额外参数保留给 callback 和 Agent，无发送位置时不得猜测或声称已发送。
+MCP must declare an input Schema, but by default it is parameter guidance for the agent, not a business gatekeeper. Use open objects. Prefer `unknown().optional()` with descriptions for known business fields; do not generate enums, formats, ranges, conditional requirements, or strict types by default. Preserve only the minimum transport constraint when a URL, attachment, or other transport structure cannot be formed without a value. Accept additional parameters; do not set `additionalProperties: false` or use strict objects. The Function must assemble invocations only from source-proven bindings and must not block a call with narrower schemas, types, or local rules. Preserve additional parameters for the callback and agent. When no destination for them is proven, do not guess or claim that they were sent.
 
-默认不声明 `outputSchema`。Tool 描述/Skill 可说明已知响应字段，但 HTTP 状态/`null`/缺失字段/数字字符串/额外字段等真实变体必须先到 Agent。仅用户明确需机器强类型输出且公开契约足够稳定时，才添加开放、不会阻断已知变体的可选 `outputSchema`。
+Do not declare `outputSchema` by default. Tool descriptions and Skills may describe known response fields, but real variations such as HTTP status, `null`, missing fields, numeric strings, and additional fields must reach the agent first. Add an optional, open `outputSchema` that does not block known variants only when the user explicitly requires machine-typed output and the public contract is sufficiently stable.
 
-普通写接口默认由后端负责校验。只有源码明确证明存在不可绕过的身份、来源、事务、单次凭证或顺序约束时，才实现确定性 Guard；页面确认框、普通 POST、普通后端拒绝或共享查询不自动成为自定义 Host Guard 的证据。
+Ordinary write interfaces are validated by the backend by default. Implement a deterministic Guard only when source explicitly proves a non-bypassable identity, provenance, transaction, one-time credential, or ordering constraint. A page confirmation dialog, ordinary POST, ordinary backend rejection, or shared query does not by itself prove the need for a custom Host Guard.
 
-### 6. 实现 Function 与 MCP
+### 6. Implement Functions and MCP
 
-Producer 根据目标仓库现有实现选择方式，不在 Code2Skill 中预置框架专用生成器：
+The Producer chooses an approach based on the target repository's existing implementation. Do not prebuild framework-specific generators inside Code2Skill:
 
-- **方式 A：可直接运行的薄包装。** 复用已有 HTTP、RPC、gRPC、SDK 或命令客户端，只封装参数映射、确定性转换、认证接入和结果传递。
-- **方式 B：原运行时内包装。** 依赖注入、事务、拦截器、线程上下文或应用内 Service 场景下，在原项目技术栈内生成薄包装。不得把业务方法搬进新 Node 包假装语义等价；若目标运行时不是当前可验证的 `node-stdio` profile（如 Java/Python 应用内 Service），本版本按方式 C 处理。
-- **方式 C：需要宿主接入。** 缺少可安全调用的客户端或运行上下文时，保留 Skill、Tool 契约与接入说明，在 `package.json` 标记 `code2skill.requiresHostIntegration`。不得生成万能 `call_rpc`、`invoke_method`、`publish_message` Tool 或声称已部署。
+- **Approach A: Directly runnable thin wrapper.** Reuse an existing HTTP, RPC, gRPC, SDK, or command client. Wrap only parameter mapping, deterministic transformations, authentication integration, and result forwarding.
+- **Approach B: Wrapper inside the original runtime.** For dependency injection, transactions, interceptors, thread context, or in-process Service scenarios, generate a thin wrapper in the original project's technology stack. Do not move business methods into a new Node package and pretend the semantics are equivalent. If the target runtime is not the currently verifiable `node-stdio` profile—for example an in-process Java or Python Service—this version handles it as Approach C.
+- **Approach C: Host integration required.** When no safely callable client or runtime context is available, preserve the Skill, tool contract, and integration instructions, and set `code2skill.requiresHostIntegration` in `package.json`. Do not generate a universal `call_rpc`, `invoke_method`, or `publish_message` tool or claim that the capability is deployed.
 
-异步发布/任务入队只说明「已接收/已入队」；存在状态查询源码时才生成独立查询能力，不得把回执/任务 ID 写成业务完成。
+For asynchronous publication or task enqueueing, state only “accepted” or “enqueued.” Generate a separate status capability only when status-query source exists. Do not present a receipt or task ID as business completion.
 
-通用规则：每 Tool 有同名独立 Function export；Function Core 导出 Zod Schema，公共字段名表达业务含义并内部映射真实字段；认证、调用构造、确定性转换必须由 Function 承担（日期/时间、格式化、默认值、改名、数组/URL、顺序、序列化、上下文）；拼接/格式化/归一化不得推给 Agent 或借开放 Schema/后端权威推卸；同一值在不同调用点独立构造 wire；MCP 使用 SDK/Zod（当前 `node-stdio` profile 示例）；每个 Tool 提供名称、`title`、`description`、开放 `inputSchema`、annotations；`outputSchema` 默认省略；已取得结果时用 `toAgentResult` 原样交 Agent；仅未取得响应的底层异常用 `toAgentError` 投影；dry-run 不发网络/写入；模块初始化不得发起业务请求；业务服务接入配置（HTTP 场景下为 API 基址）由环境注入，缺时调用前返回配置错误，不得回退到测试/预发/生产。
+General rules: each tool has a same-named independent Function export; Function Core exports a Zod Schema; public field names express business meaning and map internally to real fields; authentication, invocation construction, and deterministic transformations must be owned by the Function (date/time, formatting, defaults, renaming, arrays/URLs, ordering, serialization, and context); concatenation, formatting, and normalization must not be pushed to the agent or evaded through open Schema or backend authority; construct the wire representation of the same value independently at different call sites; MCP uses SDK/Zod (the current `node-stdio` profile example); every tool provides a name, `title`, `description`, open `inputSchema`, and annotations; omit `outputSchema` by default; after a result is obtained, use `toAgentResult` to pass it to the agent unchanged; only project low-level exceptions that produced no response through `toAgentError`; dry-run sends no network traffic or writes; module initialization must not make business requests; inject business service connection configuration through the environment (the API base URL in HTTP scenarios), return a configuration error before invocation when it is missing, and never fall back to test, staging, or production.
 
-#### HTTP 场景具体规则
+#### HTTP-Specific Rules
 
-基于 `fetch` 的实现任何 HTTP 状态都返回 `httpStatus` 与完整 `bodyText`；HTTP 客户端因 4xx/5xx 抛异常时还原状态/响应为普通 Tool 结果；仅未取得响应的底层异常进入 `toAgentError`。不得根据响应信封或业务 `code` 添加成功/失败/结果未知/重试结论。`node-stdio` profile 下复制 `portable-agent-result.mjs`，HTTP 目标使用其中 `readHttpResponse`/`httpResultFromError`。
+A `fetch`-based implementation returns `httpStatus` and complete `bodyText` for every HTTP status. When an HTTP client throws for 4xx or 5xx, recover its status and response as an ordinary tool result. Only low-level exceptions that produced no response go through `toAgentError`. Do not derive success, failure, unknown-result, or retry conclusions from a response envelope or business `code`. Under the `node-stdio` profile, copy `portable-agent-result.mjs`; HTTP targets use its `readHttpResponse` and `httpResultFromError`.
 
-何时调用 Tool、如何补参数、是否先问用户、如何理解响应及是否再调用，由 Consumer Agent 结合用户目标和实际结果决定；Function/MCP 不硬编码统一重试/写入策略。
+The Consumer Agent decides when to call a tool, how to complete parameters, whether to ask the user first, how to interpret a response, and whether to call another tool, based on the user's goal and actual result. Functions and MCP must not hard-code a universal retry or write policy.
 
-附件由 Consumer Host 提供，优先 `attachmentRef` 等不透明引用；仅 Host 明确保证来源与可访问性时才用 `hostFilePath`，这是部署信任前提。条件不满足时标附件能力未满足；源码证明存在上传链时生成上传 Function/Tool 与下游绑定；Skill 禁止 Agent 猜测或构造本地路径。只能取得 STS/预签名凭证却无法上传时，须明确目标不完整，不假装已有 URL。
+Attachments are supplied by the Consumer Host. Prefer opaque references such as `attachmentRef`. Use `hostFilePath` only when the Host explicitly guarantees provenance and accessibility; this is a deployment trust prerequisite. When the prerequisite is not met, mark the attachment capability unmet. When source proves an upload chain, generate the upload Function/tool and downstream binding. The Skill must prohibit the agent from guessing or constructing local paths. When only STS or presigned credentials are obtainable but uploading is impossible, clearly mark the goal incomplete; do not pretend a URL already exists.
 
-### 7. 编写 Skill
+### 7. Write Skills
 
-每个 Skill 只服务一个主要用户目标，独立描述其调用链；共享 Tool 是可复用原子能力，不形成跨 Skill 公共必经流程。Skill 以用户目标和源码证明的调用入口为核心，而非复述页面点击。它应说明：
+Each Skill serves one primary user goal and independently describes its invocation chain. Shared tools are reusable atomic capabilities, not a mandatory process shared across Skills. Center the Skill on the user goal and source-proven invocation point, not a retelling of page clicks. It should explain:
 
-- 什么调用触发该 Skill（HTTP、RPC service/method、消息 destination、任务入口、应用内 Service 等）；
-- 每个 Tool 能做什么、何时调用或跳过；
-- 哪些信息已知、缺失、条件必填、动态取得或可选；
-- 如何逐步询问，而非要求用户一次给完整表单；
-- 常见组合、部分目标、停止条件和结果展示；
-- 如何把实际响应呈现给 Agent，以及 Agent 可继续调用、补问或直接说明结果；
-- 源码能证明的写入影响、风险和用户可选择项；是否需要确认由 Consumer Agent 或 Host 策略决定，不在通用 Function/MCP 中强制。
+- Which invocation triggers the Skill (HTTP, RPC service/method, message destination, task entry point, in-process Service, and so on).
+- What each tool does and when to call or skip it.
+- Which information is known, missing, conditionally required, dynamically obtained, or optional.
+- How to ask incrementally instead of demanding a complete form from the user at once.
+- Common combinations, partial goals, stopping conditions, and result presentation.
+- How actual responses are presented to the agent, and how the agent may continue calling tools, ask for more information, or explain the result directly.
+- Source-proven write effects, risks, and user choices. Whether confirmation is required is decided by the Consumer Agent or Host policy, not forced in generic Functions or MCP.
 
-对含多个决策节点的目标，Skill 需说明已知/缺失/可安全取得信息、哪个结果影响下一步、何时可跳过/停止/补问/选择、写入前展示影响、Agent/Host 策略与硬约束；响应不明确时交 Agent，不能自动转为成功或失败。Skill 不是固定逐步脚本；信息齐全时不应无意义补问或重复查询。
+For a goal with multiple decision nodes, the Skill must explain known, missing, and safely obtainable information; which result changes the next step; when to skip, stop, ask, or select; effects presented before a write; agent/Host policy and hard constraints. An ambiguous response goes to the agent and must not be automatically converted to success or failure. A Skill is not a fixed step-by-step script. When information is already complete, it should not ask meaningless questions or repeat queries.
 
-根据当前 Skill 对应目标在源码中的直接调用链说明可用能力和通常顺序。查询或预校验被多目标复用只能说明是共享 Tool；没有当前目标调用链证据时，不得写成该 Skill 的前置步骤。Agent 可跳过不需要能力、临时组合 Tool、按响应调整调用或先与用户沟通。
+Describe available capabilities and the usual order from the direct source call chain for the current Skill's goal. A query or precheck reused across several goals is merely a shared tool. Without evidence from the current goal's call chain, do not make it a prerequisite for this Skill. The agent may skip unneeded capabilities, temporarily compose tools, adjust calls based on responses, or communicate with the user first.
 
-若标准路径包含“查询结果 → 选择一项 → 下游操作”，Skill 应引导 Agent 保留并传递 Function 支持的选中记录；信息仍新鲜时直接复用，不重复查询。
+When the standard path contains “query result → select one → downstream operation,” guide the agent to preserve and pass the selected record supported by the Function. Reuse it directly while the information is still fresh; do not repeat the query.
 
-决定下一步布尔、枚举或状态字段必须保留实际值；字段缺失、为 `null` 或形态无法识别时，不得擅自转换成 `false`、成功或失败。把实际结果交给 Agent，由它结合上下文判断或向用户说明无法确认。
+Preserve the actual values of booleans, enums, or status fields that decide the next step. When a field is missing, `null`, or structurally unrecognizable, do not silently convert it to `false`, success, or failure. Pass the actual result to the agent so it can judge from context or tell the user that the outcome cannot be confirmed.
 
-背景知识较短时直接写入 `SKILL.md`，明显干扰使用说明时才生成 `references/feature-context.md`，不要重复维护同一段知识。
+Put short background knowledge directly in `SKILL.md`. Generate `references/feature-context.md` only when that knowledge would materially interfere with the usage instructions. Do not maintain the same knowledge twice.
 
-`MCP-SETUP.md` 使用 `assets/core-MCP-SETUP.md` 作起点并保持简短。只说明：`npx skills add` 只安装 Skill；`node-stdio` profile 下有 lockfile 用 `npm ci`，否则 `npm install`；本地 MCP 按 stdio `command/args/cwd/env` 中立启动参数注册，独立部署远程服务才用 Streamable HTTP；业务接入配置（HTTP 场景下为基址）、认证、dry-run 环境变量如何注入；缺少运行上下文/依赖/安全入口时标记 `requires-host-integration`；缺基址时如何停止；安装/注册/连通/验证/部署分层报告。不把 Host 的 `mcpServers` 等惯例写成协议要求。背景文档用 `assets/core-feature-context.md`；不要把 strict-export-vNext 模板复制进默认包。
+Use `assets/core-MCP-SETUP.md` and `assets/core-feature-context.md` as the English templates. For Chinese user-facing output, use `assets/core-MCP-SETUP.zh-CN.md` and `assets/core-feature-context.zh-CN.md` instead. Keep `MCP-SETUP.md` concise. Explain only: `npx skills add` installs the Skill only; under the `node-stdio` profile, use `npm ci` when a lockfile exists and `npm install` otherwise; register a local MCP server through runtime-neutral stdio `command/args/cwd/env` launch parameters, and use Streamable HTTP only for an independently deployed remote service; how business connection configuration (the base URL in HTTP scenarios), authentication, and dry-run environment variables are injected; mark `requires-host-integration` when runtime context, dependencies, or a safe entry point are unavailable; how to stop when the base URL is missing; and report installation, registration, connectivity, validation, and deployment as separate layers. Do not present host conventions such as `mcpServers` as protocol requirements. Do not copy strict-export-vNext templates into the default package.
 
-### 8. 离线验证
+### 8. Offline Validation
 
-默认不调用真实业务接口。通用检查（目录、Skill、MCP discovery、安全边界）始终执行；语言特定构建与测试由已知可验证 runtime profile 处理。当前 `core-export-v1` 仅 `node-stdio` profile 可自动运行验证，其他原运行时包装按方式 C 处理。至少：
+Do not call live business interfaces by default. Always perform generic checks for directory structure, Skills, MCP discovery, and safety boundaries. Known verifiable runtime profiles handle language-specific builds and tests. The current `core-export-v1` can automatically perform runtime validation only for the `node-stdio` profile; handle wrappers in other original runtimes as Approach C. At minimum:
 
-1. Function 冒烟：覆盖源码可见调用构造（HTTP：method/URL/query/header/body/multipart；RPC：service/method/arguments；消息/任务：destination/key/payload；应用内 Service：方法与运行上下文）。用类型变体、`null` 或额外参数证明调用不被 Schema 提前拦截。选中记录交接用两条不同的匿名记录切换调用，验证无前一条记录残值。
-2. MCP 冒烟：initialize、`tools/list`、代表性 `tools/call`；证明省略 `outputSchema` 仍可调用，抽样覆盖 HTTP 4xx/5xx/非 JSON/长正文/底层异常，以及 RPC/消息/任务场景的异常与回执透传。
-3. 写能力 dry-run：验证 dry-run 不发网络或写入；写接口不真调用。
-4. 运行配置：HTTP 用 `.invalid`/mock/假基址验证 URL；RPC/Service/消息/任务用注入假客户端、Broker 句柄或运行上下文；证明缺必需配置时零外部调用，无环境默认回退。
-5. 包测试：`node-stdio` profile 示例为 `npm test`，并运行精简校验器：
+1. Function smoke tests: cover source-visible invocation construction (HTTP: method/URL/query/header/body/multipart; RPC: service/method/arguments; message/task: destination/key/payload; in-process Service: method and runtime context). Use type variants, `null`, or additional parameters to prove calls are not rejected prematurely by Schema. For selected-record handoff, switch calls between two different anonymous records and verify that no values from the previous record remain.
+2. MCP smoke tests: `initialize`, `tools/list`, and representative `tools/call`; prove that calls work without `outputSchema`; sample HTTP 4xx/5xx, non-JSON, long bodies, and low-level exceptions, as well as exception and receipt forwarding for RPC, message, and task scenarios.
+3. Write-capability dry-run: verify that dry-run sends no network traffic or writes; never call a write interface for real.
+4. Runtime configuration: for HTTP use `.invalid`, mock, or fake base URLs to validate URL construction; for RPC, Service, message, and task scenarios, inject a fake client, Broker handle, or runtime context. Prove zero external calls when required configuration is missing and no fallback environment default exists.
+5. Package tests: the `node-stdio` profile example uses `npm test`, then runs the compact validator:
 
 ```bash
 python3 <skill-root>/scripts/validate_core_export.py \
   generated/code2skill/<feature-id>
 ```
 
-`package.json` 须含 `code2skill.profile=core-export-v1`。`node-stdio` profile 下校验器做语法检查、启动 MCP 完成 `initialize + tools/list`、以清理凭证后 `node --test` 运行包内测试；它不解析源码模板、不安装依赖，有 lockfile 用 `npm ci`，否则 `npm install`；仅 `--skip-tests` 排查结构时结果不得称已验证可运行。无已知可验证 profile 时通用检查后输出「未完成自动运行验证」，不得伪造通过。测试须 mock 外部请求并遵守 dry-run。
+`package.json` must contain `code2skill.profile=core-export-v1`. Under the `node-stdio` profile, the validator performs syntax checks, starts MCP to complete `initialize + tools/list`, and runs in-package tests with `node --test` after sanitizing credentials. It does not parse source templates or install dependencies. Use `npm ci` when a lockfile exists and `npm install` otherwise. A result produced with `--skip-tests` for structural diagnosis must not be described as verified runnable. When there is no known verifiable profile, report “automatic runtime validation not completed” after generic checks; do not fabricate a pass. Tests must mock external requests and honor dry-run.
 
-测试代码保留在包内，日志/收据不保留。测试只证明包能加载、注册、组装调用、构造 Guard 与传递响应，不证明业务规则、真实响应、端到端或真实 Agent 行为；Skill 调用链、停止点、非全局前置由 code2skill-review-flow 复核。真实接口验证须显式授权，默认关闭；写接口永不自动调用；无法离线证明的能力须标记 `requires-host-integration`，不生成伪证据。
+Keep test code in the package; do not retain logs or receipts. Tests prove only that the package can load, register, assemble invocations, construct Guards, and forward responses. They do not prove business rules, live responses, end-to-end behavior, or actual agent behavior. `code2skill-review-flow` reviews Skill invocation chains, stopping points, and non-global prerequisites. Live-interface validation requires explicit authorization and is disabled by default; write interfaces are never called automatically. Capabilities that cannot be proven offline must be marked `requires-host-integration`, without fabricated evidence.
 
-生成包测试按目标组织：每个复杂目标一条正常代表路径；跨 Tool 交接验证上游结果进入下游；运行时硬边保留零外部写入的绕过反例。用匿名、跨业务领域的合成案例；匿名化仍保留真实 method/path/query/body/service/method/destination/key 字段名；跨 Tool 测试从匿名上游响应开始，两条不同的匿名记录切换调用，验证下游 wire 无残值；确定性转换断言精确 wire；预期来自源码，不得只手填最终正确参数。
+Organize generated-package tests by goal: one normal representative path for each complex goal; cross-tool handoff tests showing upstream results entering downstream calls; bypass counterexamples proving zero external writes for runtime hard boundaries. Use anonymous, cross-domain synthetic cases. Anonymization must preserve real method/path/query/body/service/method/destination/key field names. Cross-tool tests start from anonymous upstream responses, switch calls between two different anonymous records, and verify that downstream wire data retains no old values. Assert exact wire output for deterministic transformations. Derive expected values from source; do not merely hand-fill the final correct parameters.
 
-### 9. 交付报告
+### 9. Delivery Report
 
-只报告用户所需状态：生成能力、离线测试是否通过、是否调用真实环境、安装/注册/部署状态及具体限制。标记 `requires-host-integration` 的包报告「静态结构与 MCP discovery 通过，运行验证未完成」。不要把“文件已生成”“MCP 能启动”“真实业务已验证”“已部署”混为一谈。
+Report only the states the user needs: generated capabilities, whether offline tests passed, whether a live environment was called, installation/registration/deployment status, and specific limitations. For a package marked `requires-host-integration`, report: “Static structure and MCP discovery passed; runtime validation is incomplete.” Do not conflate “files generated,” “MCP starts,” “live business behavior verified,” and “deployed.”
 
-`code2skill-generate` 不自行声明主流程完整或源码精确。独立判断主要目标和代表性标准路径是否闭环时，交给 `code2skill-review-flow`；进一步核对字段来源、确定性转换和关键依赖时，交给 `code2skill-review-source`。
+`code2skill-generate` does not itself claim that the main workflow is complete or that source semantics are exact. Use `code2skill-review-flow` for an independent judgment of whether primary goals and representative standard paths are closed. Use `code2skill-review-source` for deeper checks of field provenance, deterministic transformations, and critical dependencies.
 
-## 高级验证（显式开启）
+## Advanced Validation (Explicit Opt-in)
 
-内部 `strict-export-v1` 格式保留兼容，但不再默认执行。仅用户明确要求以下任一内容时启用：完整证据链、Canonical/Goal Contract、Host compatibility、逐能力 verification matrix、live receipt、finalization、完整 manifest、外部 evaluator 或合规/高风险审计。
+The internal `strict-export-v1` format remains supported for compatibility but is no longer executed by default. Enable it only when the user explicitly requests any of the following: a complete evidence chain, Canonical/Goal Contracts, Host compatibility, a per-capability verification matrix, live receipts, finalization, a complete manifest, an external evaluator, or a compliance/high-risk audit.
 
-不要因为用户说“稳定”“可用”“完整”就自行升级到严格模式。升级前说明会扩大源码范围、产物和耗时。
+The current `strict-export-v1` compatibility contract still emits `zh-CN` Agent-facing documentation. State this boundary before enabling strict mode for a non-Chinese request. Do not present the English default templates as proof that strict output is bilingual.
 
-严格模式继续使用：
+Do not upgrade to strict mode merely because the user says “stable,” “usable,” or “complete.” Before upgrading, explain that it expands source scope, artifacts, and elapsed time.
+
+Strict mode continues to use:
 
 - [vnext-architecture.md](references/vnext-architecture.md)
 - [capability-model.md](references/capability-model.md)
@@ -191,19 +197,19 @@ python3 <skill-root>/scripts/validate_core_export.py \
 - [verification.md](references/verification.md)
 - `scripts/run_pipeline.py`
 
-现有 strict 包和校验器继续兼容；不得在同一目录混合 core 与 strict 文件。从 core 升级为 strict 时，使用新的工作目录并补充严格模式所需证据，不把 core 的离线通过伪装成审计完成。
+Existing strict packages and validators remain compatible. Do not mix core and strict files in one directory. When upgrading from core to strict, use a new working directory and add the evidence required by strict mode. Do not present core offline validation as a completed audit.
 
-## 默认不可妥协的底线
+## Non-negotiable Defaults
 
-- 不生成页面级 mega-tool，也不机械执行一接口一 Tool。
-- 输入 Schema 只保持 MCP 所需的开放对象和最低传输结构，不用业务类型提前拦截 Agent；默认不声明输出 Schema。
-- 不因字段同名就复用语义；公共名称表达业务含义，内部再映射真实调用字段。
-- 不把动态目录冻结成一次样本枚举。
-- 不把普通后端业务规则升级成虚构的硬 Workflow。
-- 不把公共能力升级成未经证明的全局前置步骤。
-- 不生成任意 `call_api` 或 Agent 自行构造的本地路径上传逃生口；Host 明确担保来源与可访问性的附件路径可以作为业务上传输入。
-- 不把调用结果、HTTP 响应、底层异常或关键判断字段改写成 Code2Skill 自己的业务结论。
-- HTTP 场景下不把业务 API 基址、其他场景下不把业务服务接入配置作为 Tool 参数或写死为测试/预发/生产默认值；由 Consumer Host 按服务显式注入。
-- 不用生成代码或它自己的绿测证明主流程完整或源码语义正确；这两项结论分别交给独立 Review Skill。
-- 不在默认验证中访问真实业务环境。
-- 不声称 Skill 安装等于 MCP 已注册、认证、验证或部署。
+- Do not generate a page-level mega-tool or mechanically create one tool per interface.
+- Keep input Schemas open with only the minimum transport structure MCP requires. Do not block the agent early with business types. Do not declare output Schemas by default.
+- Do not reuse semantics merely because fields share a name. Public names express business meaning; map internally to real invocation fields.
+- Do not freeze a dynamic catalog into enums from one sample.
+- Do not upgrade ordinary backend business rules into a fabricated hard Workflow.
+- Do not turn a shared capability into an unproven global prerequisite.
+- Do not generate an arbitrary `call_api` escape hatch or a local upload path constructed by the agent. An attachment path whose provenance and accessibility are explicitly guaranteed by the Host may be accepted as business upload input.
+- Do not rewrite invocation results, HTTP responses, low-level exceptions, or critical decision fields into Code2Skill's own business conclusions.
+- In HTTP scenarios, do not expose the business API base URL as a tool parameter; in other scenarios, do not expose business service connection configuration as a tool parameter. Never hard-code test, staging, or production defaults. The Consumer Host injects configuration explicitly per service.
+- Do not use generated code or its own green tests to prove that the main workflow is complete or source semantics are correct. Delegate those conclusions to the independent review Skills.
+- Do not access live business environments during default validation.
+- Do not claim that installing a Skill means MCP is registered, authenticated, validated, or deployed.
