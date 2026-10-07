@@ -6,6 +6,8 @@ English | [简体中文](README.zh-CN.md)
 
 Code2Skill is a collection of installable Agent Skills that helps coding agents understand business functionality in user-authorized frontend, backend, or full-stack source code, then generate Functions, MCP tools, workflow Skills, and offline tests for other agents to use.
 
+This project serves a different purpose from the similarly named [ant-intl/Code2Skill](https://github.com/ant-intl/Code2Skill), a research implementation that synthesizes procedural skill records with source provenance from code units and builds retrieval and purpose indexes.
+
 Current release: [v1.2.0](https://github.com/leechen298/Code2Skill/releases/tag/v1.2.0).
 
 ```text

@@ -6,6 +6,8 @@
 
 Code2Skill 是一组可安装的 Agent Skills。它帮助编程 Agent 从用户授权的前端、后端或全栈代码中理解业务功能，并生成可供其他 Agent 使用的 Function、MCP Tools、业务 Skills 和离线测试。
 
+本项目与同名的 [ant-intl/Code2Skill](https://github.com/ant-intl/Code2Skill) 用途不同，后者是从源码单元提炼带来源信息的程序性 skill records，并构建检索与用途索引的研究实现。
+
 当前正式版本：[v1.2.0](https://github.com/leechen298/Code2Skill/releases/tag/v1.2.0)。
 
 ```text
